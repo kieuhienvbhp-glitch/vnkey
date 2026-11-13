@@ -1,35 +1,35 @@
-# Credits
+# Ghi công
 
-## Upstream projects
+## Tác giả VNKey
 
-- **bamboo-core** — <https://github.com/BambooEngine/bamboo-core> — the original Go engine this
-  addon's Vietnamese processing is derived from, Copyright (C) 2018 Luong Thanh Lam
-  <ltlam93@gmail.com>, MIT license. The MIT text is preserved at
-  [`vnkey/LICENSE.bamboo-core`](vnkey/LICENSE.bamboo-core) so every distribution of the C++ port
-  keeps the license and the attribution, as MIT requires.
-- **VMK** — <https://github.com/thanhpy2009/VMK> — the project this addon was forked from,
+Phát triển bởi **Neo Vn**, Telegram: @neovn123 <https://t.me/neovn123>.
+
+## Các dự án gốc
+
+VNKey được xây dựng dựa trên các dự án mã nguồn mở sau:
+
+- **bamboo-core** — <https://github.com/BambooEngine/bamboo-core> — engine xử lý tiếng Việt gốc
+  viết bằng Go, Copyright (C) 2018 Luong Thanh Lam <ltlam93@gmail.com>, giấy phép MIT. Toàn văn
+  giấy phép MIT được giữ tại [`vnkey/LICENSE.bamboo-core`](vnkey/LICENSE.bamboo-core) như giấy phép
+  yêu cầu.
+- **VMK** — <https://github.com/thanhpy2009/VMK> — dự án mà addon này được fork trực tiếp,
   GPL-3.0-or-later.
-- **fcitx5-bamboo** — <https://github.com/fcitx/fcitx5-bamboo> — the fcitx5 addon whose glue the
-  forked addon layer follows, Copyright (C) 2022-2022 CSSlayer <wengxt@gmail.com>, LGPL-2.1.
+- **fcitx5-bamboo** — <https://github.com/fcitx/fcitx5-bamboo> — addon fcitx5 mà phần kết nối với
+  fcitx5 dựa theo, Copyright (C) 2022-2022 CSSlayer <wengxt@gmail.com>, LGPL-2.1.
 
-## This repository
+## Trong repo này
 
-- The engine was ported to C++17 in `vnkey/`, derived from bamboo-core (MIT) as credited above, and
-  is distributed under GPL-3.0-or-later like the addon itself. Every file carries both attributions
-  in its SPDX header.
-- The tables in `vnkey/data/` are generated from the same upstream Go sources, so they carry the same
-  attribution.
-- The corpus in `test/golden/` was dumped from the upstream Go engine before the port and is the 1:1
-  reference the C++ port is verified against.
+- Engine trong `vnkey/` là bản chuyển sang C++ từ bamboo-core (MIT) như ghi ở trên, phát hành theo
+  GPL-3.0-or-later giống phần còn lại. Mỗi file đều ghi cả hai nguồn trong phần đầu SPDX.
+- Các bảng dữ liệu trong `vnkey/data/` được sinh từ cùng mã Go gốc nên mang cùng ghi công.
+- Bộ dữ liệu kiểm thử trong `test/golden/` được xuất từ engine Go gốc, dùng để đối chiếu 1-1 với
+  bản C++.
 
-## VNKey
-
-Developed by Neo Vn, Telegram: @neovn123 <https://t.me/neovn123>.
-
-## fcitx5-vnkey
+## Bản quyền
 
 Copyright (C) 2022-2022 CSSlayer <wengxt@gmail.com>
 Copyright (C) 2025 Võ Ngô Hoàng Thành <thanhpy2009@gmail.com>
 Copyright (C) 2026 Nguyen Hoàng Ky <nhktmdzhg@gmail.com>
+Copyright (C) 2026 Neo Vn
 
-Licensed under GPL-3.0-or-later; see `LICENSE`.
+Phát hành theo giấy phép GPL-3.0-or-later, xem `LICENSE`.

@@ -1,214 +1,57 @@
-[English](CONTRIBUTING.en.md) | [Tiếng Việt](CONTRIBUTING.md)
+# Đóng góp cho VNKey
 
-# Đóng góp cho fcitx5-vnkey
+Cảm ơn bạn muốn góp sức cho VNKey! Dưới đây là cách báo lỗi, đề xuất tính năng và gửi mã.
 
-Cảm ơn bạn quan tâm đến việc đóng góp cho dự án fcitx5-vnkey! Tài liệu này hướng dẫn bạn cách tham gia phát triển dự án.
+## Báo lỗi
 
-## 📋 Mục lục
+Mở [issue mới](https://github.com/kieuhienvbhp-glitch/vnkey/issues/new/choose), chọn **Báo lỗi** và ghi rõ:
 
-- [Bắt đầu](#bắt-đầu)
-- [Quy trình đóng góp](#quy-trình-đóng-góp)
-- [Quy tắc ứng xử](#quy-tắc-ứng-xử)
-- [Quy tắc code style](#quy-tắc-code-style)
-- [Quy trình Pull Request](#quy-trình-pull-request)
-- [Lưu ý quan trọng về nhánh](#lưu-ý-quan-trọng-về-nhánh)
-- [Báo cáo lỗi](#báo-cáo-lỗi)
-- [Đề xuất tính năng](#đề-xuất-tính-năng)
-
-## Bắt đầu
-
-### Yêu cầu hệ thống
-
-- GCC hoặc Clang với hỗ trợ C++20
-- CMake >= 3.16
-- Fcitx5 development headers
-- Git
-
-### Cài đặt và build
-
-```bash
-# Vào thư mục mã nguồn
-cd fcitx5-vnkey
-
-# Build
-mkdir build && cd build
-cmake ..
-make -j$(nproc)
-```
-
-## Quy trình đóng góp
-
-### 1. Fork repository
-
-Fork repository này trên GitHub và clone fork của bạn về máy.
-
-```bash
-git clone https://github.com/yourusername/fcitx5-vnkey.git
-cd fcitx5-vnkey
-```
-
-### 2. Tạo nhánh mới
-
-Luôn tạo nhánh mới cho mỗi tính năng hoặc sửa lỗi:
-
-```bash
-git checkout dev
-git pull origin dev
-git checkout -b feature/ten-tinh-nang
-# hoặc
-git checkout -b fix/ten-loi
-```
-
-### 3. Thực hiện thay đổi
-
-- Viết code sạch, dễ đọc
-- Tuân thủ quy tắc code style (xem bên dưới)
-- Cập nhật tài liệu nếu cần
-
-### 4. Commit changes
-
-Sử dụng commit messages rõ ràng và mô tả:
-
-```
-feat: add emoji support
-
-- Add emoji_data.h
-- Update generate_emoji_header.py
-```
-
-## Quy tắc ứng xử
-
-Mọi thành viên tham gia đóng góp cho dự án này đều phải tuân thủ [Quy tắc Ứng xử cho Cộng tác viên](CODE_OF_CONDUCT.md) để xây dựng một cộng đồng cởi mở, thân thiện và lành mạnh.
-
-## Quy tắc code style
-
-Toàn bộ quy tắc nằm ở [CODE_STYLE.md](CODE_STYLE.md) — đó là nguồn duy nhất.
-
-- **C/C++**: `.clang-format` + `.clang-tidy`, chuẩn C++20.
-- **Python (`settings-gui`)**: `ruff check` và `ruff format` (cấu hình ở `pyproject.toml`).
-- Khuyến khích tạo git hook `pre-commit` để tự động format code trước khi commit bằng cách tạo file `.git/hooks/pre-commit` với nội dung:
-
-```bash
-#!/bin/bash
-# Format C/C++
-CPP_FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(cpp|h)$')
-if [ -n "$CPP_FILES" ]; then
-    for file in $CPP_FILES; do
-        clang-format -i "$file"
-        git add "$file" 
-    done
-fi
-
-# Lint & Format Python
-PY_FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^settings-gui/.*\.py$')
-if [ -n "$PY_FILES" ]; then
-    ruff check --fix settings-gui
-    ruff format settings-gui
-    for file in $PY_FILES; do
-        git add "$file"
-    done
-fi
-```
-
-Sau đó chạy lệnh: `chmod +x .git/hooks/pre-commit`
-
-## Quy trình Pull Request
-
-**Mỗi PR chỉ giải quyết một vấn đề.** Nếu bạn sửa nhiều vấn đề, hãy tách thành nhiều PR.
-
-### 1. Đảm bảo code sạch bằng `clang-format` và `ruff`
-
-```bash
-# C/C++
-clang-format -i src/*.cpp src/*.h
-
-# Python
-ruff check --fix settings-gui
-ruff format settings-gui
-```
-
-### 2. Chạy test
-
-```bash
-# Build C++ code
-cd build
-cmake .. && make
-```
-
-### 3. Rebase với nhánh dev
-
-```bash
-git checkout dev
-git pull origin dev
-git checkout feature/ten-tinh-nang
-git rebase dev
-```
-
-### 4. Push và tạo PR
-
-```bash
-git push origin feature/ten-tinh-nang
-```
-
-Tạo Pull Request trên GitHub với:
-
-- Tiêu đề mô tả rõ ràng
-- Mô tả chi tiết thay đổi
-- Liên kết đến issue liên quan (nếu có)
-- Screenshot cho UI changes
-
-## Lưu ý quan trọng về nhánh
-
-### QUAN TRỌNG: TẤT CẢ PR MERGE VÀO NHÁNH DEV
-
-**KHÔNG BAO GIỜ tạo Pull Request vào nhánh `main`**
-
-- Nhánh `main` chỉ chứa bản release ổn định và chỉ được merge bởi maintainer
-- Tất cả Pull Request phải nhắm vào nhánh `dev`
-- Sau khi pass tất cả các bài CI/CD test và được maintainer review, code sẽ được merge vào `dev`
-- Khi đủ điều kiện, code sẽ được merge từ `dev` sang `main` bởi maintainer để bump version
-
-### Cấu trúc nhánh
-
-```
-main    ← Bản release ổn định (chỉ maintainer được merge)
-  ↑
-dev     ← Nhánh phát triển chính (tất cả PR merge vào đây)
-  ↑
-feature/*, fix/*, hotfix/*  ← Nhánh cá nhân cho mỗi PR
-```
-
-### Quy trình merge
-
-1. Developer tạo PR vào `dev`
-2. Code review bởi maintainer
-3. Merge vào `dev`
-4. Test trên `dev`
-5. Khi ổn định → merge `dev` → `main` (bởi maintainer)
-
-## Báo cáo lỗi
-
-Khi báo cáo lỗi, vui lòng cung cấp:
-
-- Phiên bản fcitx5-vnkey
-- Hệ điều hành và phiên bản
-- Các bước để tái hiện lỗi
-- Log hoặc screenshot (nếu có) (Log bằng lệnh fcitx5-diagnose)
-- Môi trường (desktop environment, terminal, v.v.)
+- Phiên bản VNKey (xem ở trang **Giới thiệu** trong VNKey Settings).
+- Hệ điều hành, môi trường desktop (Deepin, KDE, GNOME…).
+- Ứng dụng bị lỗi (Chrome, terminal, VS Code…) và chế độ gõ đang dùng.
+- Bạn đã gõ gì, kết quả ra sao, đúng ra phải ra sao.
+- Nếu được, đính kèm log từ lệnh `fcitx5-diagnose`.
 
 ## Đề xuất tính năng
 
-Trước khi đề xuất tính năng mới:
+Mở issue, chọn **Yêu cầu tính năng**. Hãy tìm xem đã có ai đề xuất giống vậy chưa, rồi mô tả tính năng và lý do bạn cần nó.
 
-- Kiểm tra xem tính năng đã tồn tại chưa
-- Tìm kiếm issue tương tự
-- Mô tả rõ ràng tính năng và use case
-- Giải thích tại sao tính năng này cần thiết
+## Gửi mã (Pull Request)
+
+1. Fork repo và tải bản fork về máy:
+
+   ```bash
+   git clone https://github.com/<tài-khoản-của-bạn>/vnkey.git
+   cd vnkey
+   git checkout -b sua-loi-gi-do
+   ```
+
+2. Sửa mã, rồi build và chạy test:
+
+   ```bash
+   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+   cmake --build build -j"$(nproc)"
+   cd build && ctest
+   ```
+
+   Muốn thử trên máy thật thì build gói `.deb` bằng `./build-deb.sh` rồi cài.
+
+3. Định dạng mã trước khi commit:
+
+   ```bash
+   clang-format -i src/*.cpp src/*.h      # C++
+   ruff check --fix settings-gui && ruff format settings-gui   # Python
+   ```
+
+4. Commit với lời nhắn rõ ràng (ví dụ `Sửa lỗi mất chữ khi gõ trên Chrome`), đẩy lên fork và tạo Pull Request vào nhánh `main`.
+
+**Mỗi Pull Request chỉ nên giải quyết một việc.** Nếu sửa giao diện, hãy kèm ảnh chụp màn hình.
+
+## Quy tắc
+
+- Quy tắc viết mã: [CODE_STYLE.md](CODE_STYLE.md).
+- Quy tắc ứng xử: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 ## Giấy phép
 
-Bằng cách đóng góp, bạn đồng ý rằng code của bạn sẽ được cấp phép theo cùng giấy phép với dự án (GPL-3.0-or-later).
-
----
-
-Cảm ơn bạn đã đóng góp!
+Khi đóng góp, bạn đồng ý mã của mình được phát hành theo giấy phép của dự án (GPL-3.0-or-later).
