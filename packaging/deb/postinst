@@ -1,0 +1,27 @@
+#!/bin/sh
+set -e
+if [ "$1" = "configure" ]; then
+    command -v systemd-sysusers >/dev/null 2>&1 && systemd-sysusers vnkey.conf || true
+    modprobe uinput 2>/dev/null || true
+    if command -v udevadm >/dev/null 2>&1; then
+        udevadm control --reload-rules 2>/dev/null || true
+        udevadm trigger --subsystem-match=misc --sysname-match=uinput 2>/dev/null || true
+    fi
+    systemctl daemon-reload 2>/dev/null || true
+    # Bật server cho người dùng đã chạy sudo dpkg -i
+    TARGET_USER="${SUDO_USER:-$(logname 2>/dev/null || true)}"
+    if [ -n "$TARGET_USER" ] && [ "$TARGET_USER" != "root" ]; then
+        systemctl enable "fcitx5-vnkey-server@${TARGET_USER}.service" 2>/dev/null || true
+        systemctl restart "fcitx5-vnkey-server@${TARGET_USER}.service" 2>/dev/null || true
+    else
+        echo "Bật server: sudo systemctl enable --now fcitx5-vnkey-server@\$(whoami).service"
+    fi
+    command -v py3compile >/dev/null 2>&1 && py3compile -p fcitx5-vnkey /usr/share/fcitx5-vnkey 2>/dev/null || true
+    # Làm mới cache icon để logo mới hiện ngay
+    for t in hicolor breeze breeze-dark; do
+        [ -d "/usr/share/icons/$t" ] && command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -q -f "/usr/share/icons/$t" || true
+    done
+    command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database -q /usr/share/applications || true
+    echo "VNKey: chạy 'fcitx5 -r -d' rồi thêm bộ gõ VNKey trong Cài đặt → Bàn phím → Phương pháp nhập."
+fi
+exit 0

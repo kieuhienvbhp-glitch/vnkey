@@ -1,0 +1,1018 @@
+# Vietnamese translations for fcitx-vnkey package.
+# Copyright (C) 2026 THE fcitx-lotus'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the fcitx-vnkey package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: fcitx5-vnkey\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-11 19:45+0700\n"
+"PO-Revision-Date: 2026-11-11 19:47+0700\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: vi\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Generator: Poedit 3.10\n"
+
+#: settings-gui/ui/main_window.py:153
+msgid "&Apply"
+msgstr "&Áp dụng"
+
+#: settings-gui/ui/main_window.py:148
+msgid "&Cancel"
+msgstr "&Huỷ"
+
+#: settings-gui/ui/main_window.py:158
+msgid "&OK"
+msgstr "&OK"
+
+#: settings-gui/ui/main_window.py:142
+msgid "&Reset"
+msgstr "&Cài đặt lại"
+
+#: src/vnkey-config.h:162 src/vnkey-config.h:163 src/vnkey-config.h:164
+msgid "(ms, 0 = default)"
+msgstr "(ms, 0 = mặc định)"
+
+#: settings-gui/ui/pages/keymap_editor.py:446
+msgid ". Are you sure?"
+msgstr ". Bạn có chắc chắn?"
+
+#: settings-gui/ui/pages/macro_editor.py:202
+msgid "Abbreviation"
+msgstr "Từ viết tắt"
+
+#: settings-gui/ui/pages/macro_editor.py:180
+msgid "Abbreviation (e.g. kg)"
+msgstr "Từ viết tắt (ví dụ: kg)"
+
+#: settings-gui/ui/main_window.py:230
+msgid "About"
+msgstr "Giới thiệu"
+
+#: settings-gui/ui/pages/keymap_editor.py:287
+msgid "Action"
+msgstr "Hành động"
+
+#: settings-gui/ui/pages/dict_editor.py:118
+#: settings-gui/ui/pages/dict_editor.py:362
+#: settings-gui/ui/pages/keymap_editor.py:275
+#: settings-gui/ui/pages/keymap_editor.py:435
+#: settings-gui/ui/pages/macro_editor.py:188
+#: settings-gui/ui/pages/macro_editor.py:468 test/settings-gui/test_i18n.py:87
+msgid "Add"
+msgstr "Thêm"
+
+#: settings-gui/ui/pages/keymap_editor.py:276
+#: settings-gui/ui/pages/keymap_editor.py:435
+msgid "Add Keymap"
+msgstr "Thêm phím"
+
+#: src/vnkey-config.h:216
+msgid "Allow Macro in Off Mode"
+msgstr "Cho phép gõ tắt trong chế độ \"Tắt\""
+
+#: src/vnkey-config.h:194
+msgid "Allow Type With More Freedom"
+msgstr "Cho phép gõ dấu tự do"
+
+#: src/vnkey-config.h:195
+msgid "Allow dd To Produce đ When Auto Restore Invalid Words Is On"
+msgstr "Cho phép gõ dd thành đ khi bật Tự động khôi phục với từ sai"
+
+#: settings-gui/ui/helpers.py:30
+msgid ""
+"Allow macros to work when the input mode is OFF.\n"
+"When disabled, macros are only available in active typing modes."
+msgstr ""
+"Cho phép gõ tắt hoạt động khi chế độ gõ đang là \"Tắt\"\n"
+"Khi vô hiệu hoá, gõ tắt chỉ khả dụng trong các chế độ gõ được kích hoạt."
+
+#: src/vnkey-config.h:57
+msgid "Alt"
+msgstr "Alt"
+
+#: src/vnkey-config.h:161
+msgid "App"
+msgstr "App"
+
+#: src/vnkey-config.h:180
+msgid "App Rules"
+msgstr "Quy tắc ứng dụng"
+
+#: src/vnkey-engine.cpp:1103
+msgid "App: "
+msgstr "App: "
+
+#: settings-gui/ui/main_window.py:223
+msgid "Appearance"
+msgstr "Giao diện"
+
+#: settings-gui/ui/pages/backup.py:74 settings-gui/ui/pages/backup.py:200
+#: settings-gui/ui/pages/backup.py:265
+msgid "Application Rules"
+msgstr "Quy tắc ứng dụng"
+
+#: settings-gui/ui/pages/mode_manager.py:195 settings-gui/ui/main_window.py:218
+msgid "Applications"
+msgstr "Ứng dụng"
+
+#: settings-gui/ui/pages/keymap_editor.py:249
+msgid "Apply Preset"
+msgstr "Áp dụng cài đặt sẵn"
+
+#: settings-gui/ui/pages/backup.py:236
+msgid ""
+"Are you sure you want to restore selected components? This will overwrite "
+"current configuration."
+msgstr ""
+"Bạn có muốn khôi phục các thành phần? Điều này sẽ ghi đè cấu hình hiện tại "
+"của bạn."
+
+#: settings-gui/ui/pages/dynamic_settings.py:93
+msgid ""
+"Assign hotkeys to open the mode menu or quickly cycle through enabled modes."
+msgstr ""
+"Gán phím tắt để mở menu chế độ hoặc chuyển nhanh giữa các chế độ đang bật."
+
+#: src/vnkey-config.h:68
+msgid "Auto"
+msgstr "Tự động"
+
+#: src/vnkey-engine.cpp:210 src/vnkey-engine.cpp:374
+msgid "Auto Non-VN Restore"
+msgstr "Tự động khôi phục với từ không phải tiếng Việt"
+
+#: src/vnkey-engine.cpp:210 src/vnkey-config.h:192
+msgid "Auto Restore Invalid Words"
+msgstr "Tự động khôi phục phím với từ sai"
+
+#: src/vnkey-config.h:189
+msgid "Auto capitalize after sentence-ending punctuation (. ! ? Enter)"
+msgstr "Tự động ghi hoa sau dấu câu (. ! ? Enter) (thử nghiệm)"
+
+#: settings-gui/ui/helpers.py:19
+msgid ""
+"Automatically match expansion case to trigger key case.\n"
+"\n"
+"Example if 'kg' is 'Khô gà':\n"
+"- kg -> khô gà\n"
+"- Kg -> Khô gà\n"
+"- KG -> KHÔ GÀ"
+msgstr ""
+"Tự động khớp chữ hoa/thường của từ được kích hoạt.\n"
+"\n"
+"Ví dụ nếu 'kg' là 'khô gà':\n"
+"- kg -> khô gà\n"
+"- Kg -> Khô gà\n"
+"- KG -> KHÔ GÀ"
+
+#: settings-gui/ui/helpers.py:26
+msgid ""
+"Automatically revert the typed sequence if the resulting word is not in the "
+"dictionary.\n"
+"This helps prevent accidental Vietnamese transformations on English words or "
+"mixed text."
+msgstr ""
+"Tự động khôi phục chuỗi vừa gõ nếu từ đó không có trong từ điển.\n"
+"Nó giúp tránh các trường hợp gõ các từ tiếng Anh mà bị chuyển đổi qua Tiếng "
+"việt hoặc gõ song ngữ."
+
+#: src/vnkey-config.h:163
+msgid "Backspace Interval"
+msgstr "Khoảng cách giữa 2 dấu xoá"
+
+#: settings-gui/ui/main_window.py:224
+msgid "Backup"
+msgstr "Sao lưu"
+
+#: settings-gui/ui/pages/backup.py:55
+msgid "Backup & Restore"
+msgstr "Sao lưu & Khôi phục"
+
+#: settings-gui/ui/pages/backup.py:167
+msgid "Backup exported to:\n"
+msgstr "Sao lưu được xuất thành công vào:\n"
+
+#: settings-gui/ui/pages/about.py:179
+msgid ""
+"Based on upstream work originally licensed under <b>LGPL-2.1-or-later</b>."
+"<br>Includes third-party components licensed under the <b>MIT License</b>."
+msgstr ""
+"Dựa trên dự án thượng nguồn ban đầu được cấp phép dưới <b> LGPL-2.1-or-"
+"later</b>.<br>Bao gồm các thành phần của bên thứ ba được cấp phép theo "
+"<b>Giấy phép MIT</b>."
+
+#: settings-gui/ui/main_window.py:287
+msgid "Cannot Save"
+msgstr "Không thể lưu"
+
+#: settings-gui/ui/pages/dict_editor.py:252
+msgid ""
+"Cannot save dictionary because loading failed earlier. Please fix the file "
+"format first."
+msgstr ""
+"Không thể lưu từ điển vì tải thất bại trước đó. Hãy sửa định dạng tệp trước."
+
+#: src/vnkey-engine.cpp:208 src/vnkey-engine.cpp:373 src/vnkey-config.h:186
+msgid "Capitalize Macro"
+msgstr "Gõ tắt chữ hoa"
+
+#: src/vnkey-engine.cpp:179
+msgid "Charset"
+msgstr "Bảng mã"
+
+#: settings-gui/ui/pages/dynamic_settings.py:90
+msgid ""
+"Choose whether VNKey types replacements through the system keyboard "
+"injection instead of the uinput service."
+msgstr ""
+"Chọn xem VNKey liệu có gõ thông qua tính năng chèn phím hệ thống thay vì "
+"dịch vụ uinput."
+
+#: settings-gui/ui/components.py:257
+msgid "Clear hotkey"
+msgstr "Xoá phím tắt"
+
+#: src/vnkey-config.h:162
+msgid "Commit Interval"
+msgstr "Khoảng cách giữa 2 commit"
+
+#: settings-gui/org.fcitx.Fcitx5.Addon.VNKey.Settings.desktop.in:3
+msgid "Configure Fcitx5 VNKey Input Method"
+msgstr "Tuỳ chỉnh bộ gõ Fcitx5 VNKey"
+
+#: settings-gui/ui/pages/dynamic_settings.py:80
+msgid "Configure basic input method settings and behaviors."
+msgstr "Thiết lập các cài đặt và hành vi cơ bản của bộ gõ."
+
+#: settings-gui/ui/pages/keymap_editor.py:443
+msgid "Confirm"
+msgstr "Xác nhận"
+
+#: settings-gui/ui/pages/mode_manager.py:526
+msgid "Confirm Remove"
+msgstr "Xác nhận xoá"
+
+#: settings-gui/ui/main_window.py:238
+msgid "Confirm Reset"
+msgstr "Xác nhận cài đặt lại"
+
+#: settings-gui/ui/pages/backup.py:234
+msgid "Confirm Restore"
+msgstr "Xác nhận khôi phục"
+
+#: src/vnkey-config.h:57
+msgid "Ctrl"
+msgstr "Ctrl"
+
+#: src/vnkey-engine.cpp:212 src/vnkey-engine.cpp:375 src/vnkey-config.h:198
+msgid "Custom Dictionary"
+msgstr "Từ điển tuỳ chỉnh"
+
+#: src/vnkey-config.h:159 src/vnkey-config.h:199 src/vnkey-config.h:225
+msgid "Custom Keymap"
+msgstr "Bảng phím tuỳ chỉnh"
+
+#: settings-gui/ui/pages/backup.py:73 settings-gui/ui/pages/backup.py:199
+#: settings-gui/ui/pages/backup.py:261
+msgid "Custom Keymaps"
+msgstr "Bảng phím tuỳ chỉnh"
+
+#: settings-gui/ui/pages/dynamic_settings.py:82
+msgid "Customize the look and feel of the VNKey status icons and theme."
+msgstr "Tùy chỉnh giao diện, biểu tượng trạng thái và chủ đề của VNKey."
+
+#: src/vnkey-config.h:179
+msgid "Cycle Mode Hotkey"
+msgstr "Phím tắt chuyển nhanh chế độ"
+
+#: src/vnkey-config.h:68
+msgid "Dark"
+msgstr "Tối"
+
+#: src/vnkey-config.h:222
+msgid "Date Format ($DATE in macro)"
+msgstr "Định dạng ngày ($DATE trong macro)"
+
+#: settings-gui/ui/pages/macro_editor.py:166
+msgid "Date Format:"
+msgstr "Định dạng ngày:"
+
+#: settings-gui/ui/pages/mode_manager.py:489
+msgid "Default"
+msgstr "Mặc định"
+
+#: src/vnkey-config.h:218
+msgid "Default Backspace Interval"
+msgstr "Khoảng cách giữa 2 phím xoá mặc định"
+
+#: src/vnkey-config.h:217
+msgid "Default Commit Interval"
+msgstr "Khoảng cách giữa 2 commit mặc định"
+
+#: src/vnkey-config.h:219
+msgid "Default Post Delay"
+msgstr "Độ trễ sau commit mặc định"
+
+#: src/vnkey-mode-menu.cpp:54
+msgid "Default Typing"
+msgstr "Chế độ gõ mặc định"
+
+#: settings-gui/ui/pages/about.py:137
+msgid "Developed by"
+msgstr "Được phát triển bởi"
+
+#: settings-gui/ui/main_window.py:220
+msgid "Dictionary"
+msgstr "Từ điển"
+
+#: src/vnkey-config.h:38 src/vnkey-config.h:45 src/vnkey-config.h:57
+msgid "Disabled"
+msgstr "Tắt"
+
+#: src/vnkey-config.h:191
+msgid "Double Hyphen to Em-Dash (--)"
+msgstr "Dấu gạch ngang 2 lần để thành dấu gạch dài"
+
+#: src/vnkey-config.h:190
+msgid "Double Space to Period"
+msgstr "Phím cách 2 lần để chấm câu (thử nghiệm)"
+
+#: settings-gui/ui/pages/dynamic_settings.py:254
+msgid ""
+"Drag the handle on the left to reorder modes in the menu. Use checkboxes to "
+"toggle visibility, and click the buttons to reassign shortcuts."
+msgstr ""
+"Kéo thả biểu tượng bên trái để sắp xếp thứ tự chế độ trong menu. Đánh dấu để "
+"bật/tắt hiển thị, và nhấn vào các nút để gán lại phím tắt."
+
+#: settings-gui/ui/pages/dynamic_settings.py:567
+#, python-brace-format
+msgid "Duplicate shortcut '{}' used for multiple enabled modes."
+msgstr "Phím tắt '{}' được sử dụng bởi một chế độ gõ khác đang được bật."
+
+#: src/vnkey-config.h:31
+msgid "Emoji Picker"
+msgstr "Emoji"
+
+#: src/vnkey-config.h:185
+msgid "Enable Macro"
+msgstr "Bật gõ tắt"
+
+#: src/vnkey-config.h:185
+msgid "Enable Spell Check Using Dictionary"
+msgstr "Bật kiểm tra chính tả bằng từ điển"
+
+#: settings-gui/ui/pages/backup.py:170 settings-gui/ui/pages/backup.py:220
+#: settings-gui/ui/pages/backup.py:280 settings-gui/ui/pages/backup.py:303
+#: settings-gui/ui/pages/dict_editor.py:250
+#: settings-gui/ui/pages/dict_editor.py:289 settings-gui/ui/main_window.py:298
+msgid "Error"
+msgstr "Lỗi"
+
+#: src/vnkey-config.h:38 src/vnkey-config.h:45
+msgid "Everywhere"
+msgstr "Mọi nơi"
+
+#: settings-gui/ui/pages/dict_editor.py:358
+msgid "Exists"
+msgstr "Đã tồn tại"
+
+#: settings-gui/ui/pages/macro_editor.py:202
+msgid "Expanded Text"
+msgstr "Từ đầy đủ"
+
+#: settings-gui/ui/pages/backup.py:126
+msgid "Export Backup"
+msgstr "Xuất sao lưu"
+
+#: settings-gui/ui/pages/backup.py:85
+msgid "Export Backup..."
+msgstr "Xuất sao lưu..."
+
+#: settings-gui/ui/pages/backup.py:60
+msgid "Export/Import Settings"
+msgstr "Xuất/Nhập cài đặt"
+
+#: settings-gui/ui/pages/backup.py:170
+msgid "Failed to export backup:\n"
+msgstr "Xuất sao lưu thất bại\n"
+
+#: settings-gui/ui/pages/dynamic_settings.py:213
+msgid "Failed to load configuration."
+msgstr "Tải cấu hình thất bại."
+
+#: settings-gui/ui/pages/dict_editor.py:188
+#, python-brace-format
+msgid ""
+"Failed to load dictionary completely: {}\n"
+"Saving is disabled to prevent data loss."
+msgstr ""
+"Tải từ điển thất bại: {}\n"
+"Lưu được vô hiệu hoá để chống mất dữ liệu."
+
+#: settings-gui/ui/pages/backup.py:220
+msgid "Failed to open backup file:\n"
+msgstr "Mở tệp sao lưu thất bại:\n"
+
+#: settings-gui/ui/pages/backup.py:303
+msgid "Failed to restore backup:\n"
+msgstr "Khôi phục sao lưu thất bại:\n"
+
+#: settings-gui/ui/pages/backup.py:281
+msgid ""
+"Failed to restore the following components:\n"
+"- "
+msgstr ""
+"Khôi phục sao lưu thất bại:\n"
+"- "
+
+#: settings-gui/ui/pages/dict_editor.py:289
+#, python-brace-format
+msgid "Failed to save dictionary: {}"
+msgstr "Lưu từ điển thất bại: {}"
+
+#: settings-gui/ui/main_window.py:299
+msgid "Failed to save settings. Please check if Fcitx5 is running."
+msgstr "Lưu cài đặt thất bại. Hãy kiểm tra xem Fcitx5 có đang chạy hay không."
+
+#: settings-gui/ui/pages/about.py:144
+msgid "Fcitx5 VNKey Contributors"
+msgstr "Những người đóng góp cho Fcitx5 VNKey"
+
+#: settings-gui/org.fcitx.Fcitx5.Addon.VNKey.Settings.desktop.in:2
+msgid "Fcitx5 VNKey Settings"
+msgstr "Cài đặt Fcitx5 VNKey"
+
+#: settings-gui/ui/pages/dynamic_settings.py:84
+msgid "Fine-tune spelling corrections and advanced typing options."
+msgstr "Tinh chỉnh kiểm tra chính tả và các tùy chọn gõ nâng cao."
+
+#: settings-gui/ui/pages/macro_editor.py:184
+msgid "Full text (e.g. khô gà)"
+msgstr "Từ đầy đủ (ví dụ: khô gà)"
+
+#: settings-gui/ui/main_window.py:216
+msgid "General"
+msgstr "Tổng quan"
+
+#: settings-gui/ui/pages/mode_manager.py:202
+msgid "Global Default Mode:"
+msgstr "Chế độ toàn cục mặc định:"
+
+#: src/vnkey-config.h:226
+msgid "Icon Color"
+msgstr "Màu biểu tượng"
+
+#: settings-gui/ui/pages/backup.py:89
+msgid "Import Backup..."
+msgstr "Nhập sao lưu..."
+
+#: src/vnkey-config.h:176
+msgid "Input Method"
+msgstr "Kiểu gõ"
+
+#: settings-gui/ui/pages/backup.py:214
+msgid "Invalid backup file: No recognizable components found."
+msgstr "Tệp sao lưu không hợp lệ: không có thành phần được tìm thấy."
+
+#: settings-gui/ui/pages/backup.py:98
+msgid "Items found in backup:"
+msgstr "Mục được phát hiện trong sao lưu:"
+
+#: settings-gui/ui/pages/backup.py:128 settings-gui/ui/pages/backup.py:178
+msgid "JSON Backup (*.json);;All Files (*)"
+msgstr "Sao lưu JSON(*.json);;Tất cả tệp(*)"
+
+#: src/vnkey-config.h:151
+msgid "Key"
+msgstr "Phím"
+
+#: settings-gui/ui/pages/keymap_editor.py:267
+msgid "Key (Example: s)"
+msgstr "Phím (Ví dụ: s)"
+
+#: settings-gui/ui/pages/macro_editor.py:193
+msgid "Key:"
+msgstr "Khoá:"
+
+#: settings-gui/ui/pages/keymap_editor.py:218
+#: settings-gui/ui/main_window.py:221
+msgid "Keymap"
+msgstr "Bảng phím"
+
+#: src/vnkey-config.h:68
+msgid "Light"
+msgstr "Sáng"
+
+#: org.fcitx.Fcitx5.Addon.VNKey.metainfo.xml.in.in:7
+msgid "VNKey"
+msgstr "VNKey"
+
+#: src/vnkey-engine.cpp:1196
+msgid "VNKey - Off"
+msgstr "VNKey - Tắt"
+
+#: settings-gui/ui/main_window.py:33
+msgid "VNKey Settings"
+msgstr "Cài đặt VNKey"
+
+msgid "VNKey Wrapper For Fcitx"
+msgstr "Bộ gõ VNKey cho Fcitx"
+
+#: org.fcitx.Fcitx5.Addon.VNKey.metainfo.xml.in.in:10
+msgid ""
+"VNKey is a Vietnamese input method for Fcitx5, supporting multiple typing "
+"modes and input methods."
+msgstr "VNKey là bộ gõ tiếng Việt cho Fcitx5, hỗ trợ nhiều chế độ và kiểu gõ."
+
+#: src/vnkey-notify.cpp:88
+msgid "VNKey: the uinput server is not running"
+msgstr "VNKey: máy chủ uinput đang không chạy"
+
+#: src/vnkey-engine.cpp:207 src/vnkey-engine.cpp:372 src/vnkey-config.h:155
+#: src/vnkey-config.h:224
+msgid "Macro"
+msgstr "Gõ tắt"
+
+#: settings-gui/ui/pages/macro_editor.py:61
+msgid "Macro in Off Mode"
+msgstr "Gõ tắt trong chế độ \"Tắt\""
+
+#: settings-gui/ui/pages/macro_editor.py:414
+#: settings-gui/ui/pages/macro_editor.py:459
+msgid "Macro keys cannot contain spaces or special characters."
+msgstr "Cảnh báo: từ gõ tắt không được chứa phím cách hoặc ký tự đặc biệt."
+
+#: settings-gui/ui/pages/backup.py:72 settings-gui/ui/pages/backup.py:198
+#: settings-gui/ui/pages/backup.py:255 settings-gui/ui/pages/macro_editor.py:52
+#: settings-gui/ui/main_window.py:219
+msgid "Macros"
+msgstr "Gõ tắt"
+
+#: settings-gui/ui/pages/macro_editor.py:113
+msgid "Macros support dynamic placeholders: $TIME and $DATE."
+msgstr ""
+"Gõ tắt có thể sử dụng giữ chỗ động: $TIME (thời gian hiện tại) và $DATE "
+"(ngày hiện tại)."
+
+#: settings-gui/ui/pages/backup.py:71 settings-gui/ui/pages/backup.py:197
+#: settings-gui/ui/pages/backup.py:251
+msgid "Main Settings"
+msgstr "Cài đặt chính"
+
+#: settings-gui/ui/pages/dynamic_settings.py:85
+msgid "Manage input mode shortcuts, display order, and fast cycling."
+msgstr "Quản lý phím tắt, thứ tự hiển thị và chuyển nhanh các chế độ gõ."
+
+#: src/vnkey-config.h:161 src/vnkey-config.h:175
+msgid "Mode"
+msgstr "Chế độ"
+
+#: src/vnkey-config.h:178
+msgid "Mode Menu Hotkey"
+msgstr "Phím tắt menu chế độ gõ"
+
+#: src/vnkey-config.h:220
+msgid "Mode Order"
+msgstr "Thứ tự chế độ"
+
+#: settings-gui/ui/pages/about.py:86
+msgid "Modern, fast, and stable Vietnamese input method for Linux."
+msgstr "Bộ gõ tiếng việt hiện đại, nhanh và ổn định cho Linux."
+
+#: src/vnkey-config.h:188
+msgid "Modifier to Skip Macro for Next Word"
+msgstr "Phím để bỏ qua gõ tắt cho từ hiện tại"
+
+#: settings-gui/ui/pages/macro_editor.py:84
+msgid "Modifier to Skip Macro for Next Word:"
+msgstr "Phím để bỏ qua gõ tắt cho từ tới:"
+
+#: settings-gui/ui/pages/macro_editor.py:220
+msgid "Move Down"
+msgstr "Chuyển xuống"
+
+#: settings-gui/ui/pages/macro_editor.py:218
+msgid "Move Up"
+msgstr "Chuyển lên"
+
+#: settings-gui/ui/pages/dynamic_settings.py:286
+msgid "No interface settings available yet."
+msgstr "Không có cài đặt nào hiện khả dụng."
+
+#: src/vnkey-config.h:38 src/vnkey-config.h:45
+msgid "Non-Start"
+msgstr "Không phải đầu từ"
+
+#: settings-gui/ui/pages/macro_editor.py:135
+#: settings-gui/ui/pages/macro_editor.py:158 settings-gui/ui/components.py:341
+#: settings-gui/ui/components.py:459
+msgid "None"
+msgstr "Rỗng"
+
+#: src/vnkey-config.h:31
+msgid "OFF"
+msgstr "Tắt"
+
+#: settings-gui/ui/pages/about.py:160
+msgid "Open Source Licenses"
+msgstr "Các giấy phép mã nguồn mở"
+
+#: settings-gui/ui/pages/keymap_editor.py:244
+msgid "Original Input Method:"
+msgstr "Kiểu gõ gốc:"
+
+#: src/vnkey-config.h:177
+msgid "Output Charset"
+msgstr "Bảng mã"
+
+#: src/vnkey-state.cpp:355
+msgid "Page "
+msgstr "Trang "
+
+#: src/vnkey-config.h:164
+msgid "Post Delay"
+msgstr "Độ trễ sau commit"
+
+#: src/vnkey-config.h:31
+msgid "Preedit"
+msgstr "Gạch chân"
+
+#: settings-gui/ui/helpers.py:38
+msgid ""
+"Prefer injecting keys through the system instead of the uinput service: the "
+"wlroots virtual keyboard on Wayland and Xtest on X11.\n"
+"Turn this off to always use the uinput service; when neither backend is "
+"available the uinput service is used anyway."
+msgstr ""
+"Ưu tiên bơm phím qua hệ thống thay vì dịch vụ uinput: sử dụng bàn phím ảo "
+"wlroots trên wayland và Xtest trên X11.\n"
+"Tắt tuỳ chọn này để luôn sử dụng dịch vụ uinput, khi không có backend nào "
+"khả dụng thì uinput sẽ luôn được sử dụng."
+
+#: src/vnkey-config.h:200
+msgid "Prefer system keyboard injection when available"
+msgstr "Ưu tiên bơm phím qua hệ thống khi khả dụng"
+
+#: settings-gui/ui/helpers.py:34
+msgid ""
+"Press and release the selected modifier key before typing to skip macro "
+"expansion for the next word.\n"
+"If another key is pressed between the modifier's press and release, the skip "
+"is cancelled."
+msgstr ""
+"Ấn phím được chọn trước khi gõ để bỏ qua phím tắt cho từ tiếp theo.\n"
+"Nếu có phím được nhấn cùng phím này trước khi nhả phím, việc bỏ qua sẽ bị "
+"huỷ."
+
+#: settings-gui/ui/pages/dict_editor.py:144
+#: settings-gui/ui/pages/keymap_editor.py:301
+#: settings-gui/ui/pages/macro_editor.py:216
+#: settings-gui/ui/pages/mode_manager.py:176
+msgid "Remove"
+msgstr "Xoá"
+
+#: settings-gui/ui/pages/mode_manager.py:527
+msgid "Remove rules for this application?"
+msgstr "Bạn có chắc chắn muốn xoá quy tắc cho ứng dụng này?"
+
+#: settings-gui/ui/pages/keymap_editor.py:302
+msgid "Remove selected row"
+msgstr "Xoá dòng đang chọn"
+
+#: settings-gui/ui/pages/about.py:105
+msgid "Report Bug"
+msgstr "Báo cáo lỗi"
+
+#: settings-gui/ui/pages/about.py:116
+msgid "Request Feature"
+msgstr "Đề xuất tính năng"
+
+#: settings-gui/ui/pages/backup.py:103
+msgid "Restore Selected Now"
+msgstr "Khôi phục đang chọn hiện tại"
+
+#: settings-gui/ui/main_window.py:239
+msgid "Restore all settings to defaults?"
+msgstr "Bạn có chắc chắn muốn khôi phục tất cả cài đặt về giá trị mặc định?"
+
+#: src/vnkey-config.h:167
+msgid "Rules"
+msgstr "Quy tắc"
+
+#: settings-gui/ui/pages/backup.py:63
+msgid ""
+"Save or restore configuration via JSON files. Select components to include:"
+msgstr ""
+"Lưu hoặc khôi phục cấu hình của bạn vào một tệp JSON. Chọn cái bạn muốn:"
+
+#: settings-gui/ui/pages/mode_manager.py:163
+msgid "Search applications..."
+msgstr "Tìm ứng dụng..."
+
+#: settings-gui/ui/pages/keymap_editor.py:234
+msgid "Search keys..."
+msgstr "Tìm phím..."
+
+#: settings-gui/ui/pages/macro_editor.py:93
+msgid "Search macros..."
+msgstr "Tìm từ gõ tắt..."
+
+#: settings-gui/ui/pages/dict_editor.py:95
+msgid "Search words..."
+msgstr "Tìm từ..."
+
+#: settings-gui/ui/pages/dict_editor.py:99
+#: settings-gui/ui/pages/keymap_editor.py:238
+#: settings-gui/ui/pages/macro_editor.py:230
+msgid "Search:"
+msgstr "Tìm:"
+
+#: settings-gui/ui/pages/backup.py:176
+msgid "Select Backup File"
+msgstr "Chọn tệp sao lưu"
+
+#: settings-gui/ui/pages/mode_manager.py:235
+msgid "Select an application"
+msgstr "Tìm một ứng dụng"
+
+#: settings-gui/ui/pages/backup.py:120
+msgid "Select at least one item to export."
+msgstr "Hãy chọn ít nhất một mục để xuất."
+
+#: settings-gui/ui/pages/backup.py:229
+msgid "Select at least one item to restore."
+msgstr "Chọn ít nhất một mục để khôi phục."
+
+#: settings-gui/ui/pages/backup.py:289
+msgid ""
+"Selected components restored. Fcitx5 restart may be required for some "
+"changes."
+msgstr ""
+"Các thành phần được chọn đã khôi phục thành công. Vài thay đổi cần khởi động "
+"lại fcitx5."
+
+#: src/vnkey-engine.cpp:216
+msgid "Settings"
+msgstr "Cài đặt"
+
+#: settings-gui/ui/main_window.py:307
+msgid "Settings saved."
+msgstr "Cài đặt đã được lưu."
+
+#: src/vnkey-config.h:57
+msgid "Shift"
+msgstr "Shift"
+
+#: src/vnkey-config.h:215
+msgid "Shortcut for Default Typing"
+msgstr "Phím tắt cho Chế độ gõ mặc định"
+
+#: src/vnkey-config.h:213
+msgid "Shortcut for Emoji Picker"
+msgstr "Phím tắt cho Emoji"
+
+#: src/vnkey-config.h:214
+msgid "Shortcut for OFF"
+msgstr "Phím tắt cho Tắt"
+
+#: src/vnkey-config.h:211
+msgid "Shortcut for Preedit"
+msgstr "Phím tắt cho Gạch chân"
+
+#: src/vnkey-config.h:209
+msgid "Shortcut for Surrounding Text"
+msgstr "Phím tắt cho Sửa trực tiếp"
+
+#: src/vnkey-config.h:207
+msgid "Shortcut for Uinput (Select)"
+msgstr "Phím tắt cho Bôi đen gõ đè"
+
+#: src/vnkey-config.h:203
+msgid "Shortcut for Uinput (Smooth)"
+msgstr "Phím tắt cho Xóa lùi"
+
+#: src/vnkey-config.h:205
+msgid "Shortcut for Uinput (Super Smooth)"
+msgstr "Phím tắt cho Xóa lùi nhanh"
+
+#: settings-gui/ui/main_window.py:222
+msgid "Shortcuts"
+msgstr "Phím tắt"
+
+#: src/vnkey-config.h:214
+msgid "Show Default Typing"
+msgstr "Hiển thị chế độ gõ mặc định"
+
+#: src/vnkey-config.h:212
+msgid "Show Emoji Picker"
+msgstr "Hiển thị chế độ Emoji"
+
+#: src/vnkey-config.h:213
+msgid "Show OFF"
+msgstr "Hiển thị chế độ Tắt"
+
+#: src/vnkey-config.h:210
+msgid "Show Preedit"
+msgstr "Hiển thị chế độ Gạch chân"
+
+#: src/vnkey-config.h:208
+msgid "Show Surrounding Text"
+msgstr "Hiển thị chế độ Sửa trực tiếp"
+
+#: src/vnkey-config.h:206
+msgid "Show Uinput (Select)"
+msgstr "Hiển thị chế độ Bôi đen gõ đè"
+
+#: src/vnkey-config.h:202
+msgid "Show Uinput (Smooth)"
+msgstr "Hiển thị chế độ Xóa lùi"
+
+#: src/vnkey-config.h:204
+msgid "Show Uinput (Super Smooth)"
+msgstr "Hiển thị chế độ Xóa lùi nhanh"
+
+#: src/vnkey-engine.cpp:206 src/vnkey-engine.cpp:371
+msgid "Spell Check"
+msgstr "Kiểm tra chính tả"
+
+#: settings-gui/ui/pages/backup.py:167 settings-gui/ui/pages/backup.py:288
+#: settings-gui/ui/main_window.py:307
+msgid "Success"
+msgstr "Thành công"
+
+#: src/vnkey-config.h:31
+msgid "Surrounding Text"
+msgstr "Sửa trực tiếp"
+
+#: settings-gui/ui/pages/keymap_editor.py:444
+msgid "This operation will replace all existing keys with "
+msgstr "Việc này sẽ thay thế mọi phím sẵn có với "
+
+#: settings-gui/ui/pages/about.py:167
+msgid ""
+"This project is licensed under the <b>GNU General Public License v3.0 or "
+"later (GPL-3.0-or-later)</b>."
+msgstr ""
+"Dự án được cấp phép dưới <b>Giấy phép Công cộng GNU phiên bản 3.0 hoặc mới "
+"hơn (GPL-3.0-or-later)</b>."
+
+#: src/vnkey-config.h:221
+msgid "Time Format ($TIME in macro)"
+msgstr "Định dạng giờ ($TIME trong gõ tắt)"
+
+#: settings-gui/ui/pages/macro_editor.py:143
+msgid "Time Format:"
+msgstr "Định dạng giờ:"
+
+#: src/vnkey-engine.cpp:1086
+msgid "Type"
+msgstr "Gõ"
+
+#: src/vnkey-config.h:182
+msgid "Type [ -> ơ, ] -> ư, { -> Ơ, } -> Ư"
+msgstr "Gõ [ -> ơ, ] -> ư, { -> Ơ, } -> Ư"
+
+#: src/vnkey-config.h:181
+msgid "Type w to Produce ư"
+msgstr "Gõ w thành ư"
+
+#: settings-gui/ui/main_window.py:217
+msgid "Typing"
+msgstr "Nhập liệu"
+
+#: src/vnkey-config.h:32
+msgid "Uinput (Select)"
+msgstr "Bôi đen gõ đè"
+
+#: src/vnkey-config.h:31
+msgid "Uinput (Smooth)"
+msgstr "Xóa lùi"
+
+#: src/vnkey-config.h:31
+msgid "Uinput (Super Smooth)"
+msgstr "Xóa lùi nhanh"
+
+#: src/vnkey-notify.cpp:84
+msgid ""
+"Uinput modes need the VNKey uinput server. Enable the server service for "
+"your distribution and init system."
+msgstr ""
+"Chế độ uinput cần máy chủ uinput VNKey. Bật dịch vụ máy chủ cho bản phân "
+"phối và hệ thống init của bạn."
+
+#: settings-gui/ui/pages/keymap_editor.py:435
+#: settings-gui/ui/pages/macro_editor.py:468
+msgid "Update"
+msgstr "Cập nhật"
+
+#: settings-gui/ui/pages/keymap_editor.py:435
+msgid "Update Keymap"
+msgstr "Cập nhật phím"
+
+#: src/vnkey-config.h:196
+msgid "Use VNKey Status Icons"
+msgstr "Sử dụng biểu tượng trạng thái VNKey"
+
+#: src/vnkey-config.h:193
+msgid "Use oà, uý (Instead Of òa, úy)"
+msgstr "Sử dụng oà, uý (Thay vì òa, úy)"
+
+#: src/vnkey-config.h:151
+msgid "Value"
+msgstr "Giá trị"
+
+#: settings-gui/ui/pages/macro_editor.py:195
+msgid "Value:"
+msgstr "Giá trị:"
+
+#: settings-gui/ui/pages/about.py:71
+#, python-brace-format
+msgid "Version {}"
+msgstr "Phiên bản {}"
+
+#: org.fcitx.Fcitx5.Addon.VNKey.metainfo.xml.in.in:8
+msgid "Vietnamese input method (VNKey)"
+msgstr "Bộ gõ tiếng Việt (VNKey)"
+
+#: settings-gui/ui/pages/backup.py:120 settings-gui/ui/pages/backup.py:229
+#: settings-gui/ui/pages/dict_editor.py:186
+msgid "Warning"
+msgstr "Cảnh báo"
+
+#: settings-gui/ui/pages/dict_editor.py:317
+#: settings-gui/ui/pages/dict_editor.py:349
+msgid "Warning: Dictionary words should not contain spaces."
+msgstr "Cảnh báo: Từ trong từ điển không chứa dấu cách."
+
+#: settings-gui/ui/pages/dict_editor.py:114
+msgid "Word (e.g. khongdau)"
+msgstr "Từ (ví dụ: khongdau)"
+
+#: settings-gui/ui/pages/dict_editor.py:122
+msgid "Word:"
+msgstr "Từ:"
+
+#: settings-gui/ui/pages/dict_editor.py:79
+msgid ""
+"Words in the custom dictionary will be excluded from 'Auto Restore Invalid "
+"Words'. Use this for names, technical terms, or words not yet in the built-"
+"in dictionary."
+msgstr ""
+"Các từ trong từ điển tuỳ chỉnh sẽ được bảo vệ trong tuỳ chọn \"Tự động khôi "
+"phục với từ sai'. Sử dụng nó cho các tên, thuật ngữ kỹ thuật, hoặc các từ "
+"không có trong từ điển cơ bản."
+
+#: settings-gui/ui/helpers.py:17
+msgid "You can type tone marks at the end of the word or anywhere inside."
+msgstr "Bạn có thể gõ dấu câu ở cuối từ hoặc bất cứ đâu."
+
+#: settings-gui/ui/components.py:455
+msgid "[ Press Key... ]"
+msgstr "[ Nhấn phím... ]"
+
+#: settings-gui/ui/components.py:327
+msgid "[ Recording... ]"
+msgstr "[ Đang ghi lại... ]"
+
+msgid "Typing Options"
+msgstr "Tuỳ chọn gõ"
+
+msgid "Uinput Backend"
+msgstr "Cách gửi phím"
+
+msgid "Theme & Icons"
+msgstr "Biểu tượng"
+
+msgid "Spelling & Corrections"
+msgstr "Chính tả & sửa lỗi"
+
+msgid "Main Shortcuts"
+msgstr "Phím tắt chính"
+
+msgid "Mode Switching"
+msgstr "Chuyển chế độ"
+
+msgid "Basic"
+msgstr "Cơ bản"
+
+msgid "Advanced"
+msgstr "Nâng cao"
+
+msgid "Other"
+msgstr "Khác"
+
+msgid "Uinput (Adaptive)"
+msgstr "Tự động"
+
+msgid "Show Uinput (Adaptive)"
+msgstr "Hiển thị chế độ Tự động"
+
+msgid "Shortcut for Uinput (Adaptive)"
+msgstr "Phím tắt cho Tự động"

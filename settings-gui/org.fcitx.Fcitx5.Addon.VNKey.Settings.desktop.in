@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Fcitx5 VNKey Settings
+Comment=Configure Fcitx5 VNKey Input Method
+Exec=fcitx5-vnkey-settings
+Icon=fcitx-vnkey
+StartupWMClass=org.fcitx.Fcitx5.Addon.VNKey.Settings
+Terminal=false
+Type=Application
+Categories=Settings;DesktopSettings;

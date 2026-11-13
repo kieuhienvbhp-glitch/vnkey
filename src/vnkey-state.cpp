@@ -1,0 +1,1873 @@
+/*
+ * SPDX-FileCopyrightText: 2022-2022 CSSlayer <wengxt@gmail.com>
+ * SPDX-FileCopyrightText: 2025 Võ Ngô Hoàng Thành <thanhpy2009@gmail.com>
+ * SPDX-FileCopyrightText: 2026 Nguyễn Hoàng Kỳ  <nhktmdzhg@gmail.com>
+ * SPDX-FileCopyrightText: 2026 kimxuanhong <kimxuanhong@outlook.com>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ */
+#include <cstdio>
+#include "vnkey-state.h"
+#include "vnkey-engine.h"
+#include "vnkey-candidates.h"
+#include "vnkey-fcitx-text.h"
+#include "vnkey-log.h"
+#include "vnkey-utils.h"
+#include "vnkey-wlr-virtual-keyboard.h"
+#include "vnkey-x11-keyboard.h"
+
+#include "emoji.h"
+#include "input_method.h"
+#include "utf8.h"
+
+#include <cstddef>
+#include <fcitx-utils/keysym.h>
+#include <fcitx-utils/utf8.h>
+#include <fcitx/candidatelist.h>
+#include <fcitx/inputpanel.h>
+#include <fcitx/userinterface.h>
+
+#include <algorithm>
+#include <string>
+#include <sys/socket.h>
+#include <sys/un.h>
+
+namespace fcitx {
+    constexpr int     kMaxScanLength         = 15;
+    constexpr int64_t kReplacementAckSlackMs = 200;
+    constexpr int64_t kMouseClickWatchdogMs  = 200; ///< Time a client gets to reset itself after a click
+
+    constexpr int     kMinDelayMs = 1;
+    constexpr int     kMaxDelayMs = 1000;
+
+    int               clampDelay(int value) {
+        return std::clamp(value, kMinDelayMs, kMaxDelayMs);
+    }
+
+    bool isWordBreak(uint32_t ucs4) {
+        // Space, tab, newline, carriage return, null, or punctuation/symbols (: ; < = > ? @)
+        return ucs4 == ' ' || ucs4 == '\t' || ucs4 == '\n' || ucs4 == '\r' || ucs4 == 0 || (ucs4 >= 58 && ucs4 <= 64);
+    }
+
+    VNKeyState::VNKeyState(VNKeyEngine* engine, InputContext* ic) : engine_(*engine), ic_(*ic) {
+        setEngine();
+    }
+
+    void VNKeyState::setEngine() {
+        vnkeyEngine_ = nullptr;
+
+        if (engine_.config().inputMethod.value() == vnkey::InputMethodId::Custom) {
+            std::unordered_map<std::string, std::string> definition;
+            for (const auto& keymap : *engine_.customKeymap().customKeymap) {
+                definition.emplace(*keymap.key, *keymap.value);
+            }
+            // Go's NewCustomEngine parsed the custom definition and left spell checking off.
+            vnkeyEngine_ = std::make_shared<vnkey::KeyProcessor>(vnkey::parseInputMethod(definition), false);
+        } else {
+            vnkeyEngine_ = std::make_shared<vnkey::KeyProcessor>(vnkey::cachedInputMethod(engine_.config().inputMethod.value()), true);
+        }
+        vnkeyEngine_->setMacroTable(engine_.macroTable());
+        vnkeyEngine_->setDictionary(engine_.dictionary());
+        setOption();
+        resetMacroSkip();
+    }
+
+    void VNKeyState::setOption() {
+        if (!vnkeyEngine_)
+            return;
+        vnkey::Options option = {
+            .autoNonVnRestore    = *engine_.config().autoNonVnRestore,
+            .ddFreeStyle         = *engine_.config().ddFreeStyle,
+            .macroEnabled        = *engine_.config().enableMacro,
+            .autoCapitalizeMacro = *engine_.config().capitalizeMacro,
+            .spellCheckWithDicts = *engine_.config().spellCheck,
+            .modernStyle         = *engine_.config().modernStyle,
+            .freeMarking         = *engine_.config().freeMarking,
+            .outputCharset       = *engine_.config().outputCharset,
+            .w2u                 = *engine_.config().w2u,
+            .bracketTransform    = *engine_.config().bracketTransform,
+            .timeFormat          = *engine_.config().timeFormat,
+            .dateFormat          = *engine_.config().dateFormat,
+        };
+
+        vnkeyEngine_->setOptions(option);
+    }
+
+    bool VNKeyState::vkUsable() const {
+        return *engine_.config().preferVirtualKeyboard && VNKeyWlrVirtualKeyboard::instance().available();
+    }
+
+    bool VNKeyState::x11Usable() const {
+        return *engine_.config().preferVirtualKeyboard && getEnv("WAYLAND_DISPLAY").empty() && VNKeyX11Keyboard::instance().available();
+    }
+
+    bool VNKeyState::injectionUsable() const {
+        return vkUsable() || x11Usable();
+    }
+
+    bool VNKeyState::setupUinput() {
+        return engine_.kbSender().ensureConnected();
+    }
+
+    void VNKeyState::sendKbMsg(KbOp op, size_t count, uint32_t preDelay, uint32_t interval, uint32_t postDelay) {
+        const KbMsg msg{.op = op, .count = count, .preDelay = preDelay, .interval = interval, .postDelay = postDelay};
+        engine_.kbSender().send(msg);
+    }
+
+    void VNKeyState::sendBackspaceUinput(size_t count, uint32_t preDelay, uint32_t interval, uint32_t postDelay) {
+        sendKbMsg(KbOp::Backspace, count, preDelay, interval, postDelay);
+    }
+
+    void VNKeyState::sendSelectUinput(size_t count, uint32_t preDelay, uint32_t interval, uint32_t postDelay) {
+        sendKbMsg(KbOp::Select, count, preDelay, interval, postDelay);
+    }
+
+    void VNKeyState::cancelPendingUinput() {
+        if (!g_isDeleting.load(std::memory_order_acquire)) {
+            return;
+        }
+        sendKbMsg(KbOp::Cancel, 0, 0, 0, 0);
+        VNKEY_INFO("Cancel the burst still pending on the uinput server");
+    }
+
+    void VNKeyState::discardForAppChange() {
+        cancelPendingUinput();
+        g_isDeleting.store(false, std::memory_order_release);
+        deferredCommitTimer_.reset();
+        deferredCommitPending_ = false;
+        deferredCommitText_.clear();
+        commitBatch_.clear();
+        deferredFocusOut_ = false;
+        realSelect_       = false;
+        lastSelect_       = false;
+        clearAllBuffers();
+    }
+
+    void VNKeyState::abortPendingUinputReplacement() {
+        selectAbortDeferred_ = false;
+        if (!g_isDeleting.load(std::memory_order_acquire)) {
+            return;
+        }
+        cancelPendingUinput();
+        // The server finishes the selection on Cancel, so the old text is always
+        // fully removed: stash the replacement text for the refocus commit.
+        stashedCommit_      = pendingCommitString_;
+        stashedNewWord_     = oldPreBuffer_;
+        uinputAbortTimeMs_  = nowMs();
+        uinputAbortPending_ = !stashedCommit_.empty() || !bufferedKeys_.empty();
+        pendingCommitString_.clear();
+        expectedBackspaces_    = 0;
+        currentBackspaceCount_ = 0;
+        replacementDeadlineMs_ = 0;
+        realSelect_            = false;
+        deletionInterruptedAt_ = 0;
+        g_isDeleting.store(false, std::memory_order_release);
+
+        oldPreBuffer_.clear();
+        hasHistory_   = false;
+        deferCommits_ = getFrontendName(&ic_) == "dbus";
+    }
+
+    void VNKeyState::deferSelectAbort() {
+        if (!g_isDeleting.load(std::memory_order_acquire)) {
+            return;
+        }
+        selectAbortDeferred_ = true;
+        VNKEY_INFO("Defer the select abort across the focus bounce");
+    }
+
+    void VNKeyState::cancelSelectAbort() {
+        selectAbortDeferred_ = false;
+    }
+
+    void VNKeyState::armMouseClickWatchdog() {
+        if (currentMode() != VNKeyMode::Preedit || mouseClickWatchdog_) {
+            return;
+        }
+        mouseClickWatchdog_ =
+            engine_.instance()->eventLoop().addTimeEvent(CLOCK_MONOTONIC, now(CLOCK_MONOTONIC) + (kMouseClickWatchdogMs * 1000), 0, [this](EventSourceTime*, uint64_t) {
+                [[maybe_unused]] auto* released = mouseClickWatchdog_.release();
+                if (currentMode() == VNKeyMode::Preedit && !pullPreeditString().empty()) {
+                    VNKEY_INFO("Mouse click watchdog: drop the preedit the client already committed");
+                    reset();
+                }
+                return false;
+            });
+        VNKEY_DEBUG("Mouse click watchdog armed");
+    }
+
+    void VNKeyState::cancelMouseClickWatchdog() {
+        mouseClickWatchdog_.reset();
+    }
+
+    void VNKeyState::abortDeferredSelectIfPending() {
+        if (!selectAbortDeferred_ || !g_isDeleting.load(std::memory_order_acquire)) {
+            return;
+        }
+        VNKEY_INFO("Select burst abandoned: the context did not come back");
+        abortPendingUinputReplacement();
+    }
+
+    void VNKeyState::rearmReplacementDeadline() {
+        if (!g_isDeleting.load(std::memory_order_acquire)) {
+            return;
+        }
+        const auto remaining   = static_cast<int64_t>(expectedBackspaces_ - std::min(expectedBackspaces_, currentBackspaceCount_));
+        replacementDeadlineMs_ = nowMs() + (remaining * static_cast<int64_t>(burstIntervalMs_)) + replacementEchoGrace_;
+    }
+
+    void VNKeyState::dropAbortedUinputStash() {
+        cancelSelectAbort();
+        stashedCommit_.clear();
+        stashedNewWord_.clear();
+        uinputAbortTimeMs_ = 0;
+        (*vnkeyEngine_).reset();
+        oldPreBuffer_.clear();
+        hasHistory_   = false;
+        deferCommits_ = getFrontendName(&ic_) == "dbus";
+        if (!bufferedKeys_.empty()) {
+            replayBufferedKeys();
+        }
+        flushCommitBatch();
+    }
+
+    void VNKeyState::reconcileAbortedUinputReplacement() {
+        if (!uinputAbortPending_) {
+            return;
+        }
+        uinputAbortPending_ = false;
+
+        // Stale abort: the context stayed away too long, likely a real application switch.
+        if (uinputAbortTimeMs_ != 0 && nowMs() - uinputAbortTimeMs_ > 2000) {
+            VNKEY_INFO("Drop the replacement aborted at focus out: it went stale");
+            dropAbortedUinputStash();
+            return;
+        }
+
+        if (stashedCommit_.empty()) {
+            // Nothing to put back; the buffered keys replay as fresh input.
+            dropAbortedUinputStash();
+            return;
+        }
+
+        // The server-side Cancel finished the selection: the replacement text belongs at the cursor.
+        appendCommit(stashedCommit_);
+        oldPreBuffer_ = stashedNewWord_;
+        hasHistory_   = !stashedNewWord_.empty();
+        deferCommits_ = getFrontendName(&ic_) == "dbus";
+        if (!bufferedKeys_.empty()) {
+            replayBufferedKeys();
+        }
+        flushCommitBatch();
+        VNKEY_INFO("Commit the replacement text aborted at focus out");
+    }
+
+    bool VNKeyState::isAutofillCertain(const SurroundingText& s) {
+        if (!s.isValid() || oldPreBuffer_.empty() || isChromium_) {
+            return false;
+        }
+        auto               textRange = fcitx::utf8::MakeUTF8CharRange(s.text());
+        std::u32string     u32Text(textRange.begin(), textRange.end());
+
+        const unsigned int cursor  = s.cursor();
+        const unsigned int anchor  = s.anchor();
+        const size_t       textLen = u32Text.length();
+
+        // Surrounding text can lag behind IME state, so confirm oldPreBuffer_ is still near the cursor before trusting it.
+        const size_t buffLen    = oldPreBuffer_.length();
+        const size_t pb         = u32Text.find(oldPreBuffer_);
+        size_t       rangeStart = static_cast<size_t>(cursor) >= buffLen ? static_cast<size_t>(cursor) - buffLen : 0;
+        const bool   sameprefix = pb != std::u32string::npos && pb >= rangeStart && pb <= static_cast<size_t>(cursor);
+
+        // Detect browser autofill/autocomplete suggestions via selection.
+        if (cursor != anchor) {
+            unsigned int selectionStart = std::min(anchor, cursor);
+            unsigned int selectionEnd   = std::max(anchor, cursor);
+
+            // Only consider it browser autofill if the selection starts at the cursor
+            // and extends to the end of the line (common address bar behavior).
+            if (selectionStart >= cursor || (selectionStart < cursor && selectionEnd > cursor)) {
+                if (!sameprefix)
+                    return false;
+                // If the selection contains a newline, it's likely a multiline editor (AI ghost text),
+                // not a single-line URL/Search bar.
+                size_t p = u32Text.find(U'\n', selectionStart);
+                return p == std::u32string::npos || p >= static_cast<size_t>(selectionEnd);
+            }
+        }
+
+        if (textLen == static_cast<size_t>(cursor)) {
+            g_realTextLen.store(textLen, std::memory_order_release);
+            return false;
+        }
+
+        // Heuristic: rapid text growth in a single-line context.
+        // Applied only when no newline is present after the cursor to distinguish from AI text in editors.
+        // Gecko/Firefox: if buffLen > textLen, surrounding text is stale (async update race)
+        if (buffLen > textLen) {
+            return false;
+        }
+        if (textLen > static_cast<size_t>(cursor) + 1 && cursor == g_realTextLen.load(std::memory_order_acquire) && u32Text.find(U'\n', cursor) == std::u32string::npos &&
+            sameprefix)
+            return true;
+
+        for (auto v = g_realTextLen.load(std::memory_order_acquire); v < cursor && !g_realTextLen.compare_exchange_weak(v, cursor, std::memory_order_acq_rel);)
+            ;
+        return false;
+    }
+
+    void VNKeyState::handlePreeditMode(KeyEvent& keyEvent, KeySym currentSym) {
+        const uint32_t keyVal = engineKeyValue(currentSym);
+        if (vnkeyEngine_->processKey(keyVal, vnkey::keyStatesFromBits(static_cast<uint32_t>(keyEvent.rawKey().states())))) {
+            keyEvent.filterAndAccept();
+        } else {
+            VNKEY_DEBUG("Preedit: key not processed, forwarding (sym=" + std::to_string(currentSym) + ", keyVal=" + std::to_string(keyVal) + ")");
+        }
+        const std::u32string commitText = pullCommitString();
+        vnkey::fcitx_text::commit(&ic_, commitText, lastCommitTime_);
+        ic_.inputPanel().reset();
+        const std::u32string preeditText = pullPreeditString();
+        if (!preeditText.empty()) {
+            Text text = vnkey::fcitx_text::toText(preeditText);
+            if (ic_.capabilityFlags().test(CapabilityFlag::Preedit))
+                ic_.inputPanel().setClientPreedit(text);
+            else
+                ic_.inputPanel().setPreedit(text);
+        }
+        ic_.updatePreedit();
+        ic_.updateUserInterface(UserInterfaceComponent::InputPanel);
+    }
+
+    void VNKeyState::updateEmojiPageStatus(CommonCandidateList* commonList) {
+        if ((commonList == nullptr) || commonList->empty()) {
+            return;
+        }
+
+        int pageSize = commonList->pageSize();
+        if (pageSize <= 0) {
+            pageSize = 9;
+        }
+
+        int         totalItems  = commonList->totalSize();
+        int         currentPage = commonList->currentPage() + 1;
+        int         totalPages  = (totalItems + pageSize - 1) / pageSize;
+
+        std::string status = _("Page ") + std::to_string(currentPage) + "/" + std::to_string(totalPages);
+        ic_.inputPanel().setAuxDown(Text(status));
+    }
+
+    void VNKeyState::handleEmojiMode(KeyEvent& keyEvent) {
+        const KeySym currentSym      = keyEvent.rawKey().sym();
+        bool         isCtrlBackspace = isBackspace(currentSym) && ((keyEvent.rawKey().states() & KeyState::Ctrl) != 0U);
+
+        if (keyEvent.key().hasModifier() && !isCtrlBackspace) {
+            keyEvent.forward();
+            return;
+        }
+
+        auto baseList   = ic_.inputPanel().candidateList();
+        auto commonList = std::dynamic_pointer_cast<CommonCandidateList>(baseList);
+        if (commonList && currentSym >= FcitxKey_1 && currentSym <= FcitxKey_9) {
+            int offset      = currentSym - FcitxKey_1;
+            int globalIndex = (commonList->currentPage() * commonList->pageSize()) + offset;
+
+            if (globalIndex < commonList->totalSize()) {
+                commonList->candidateFromAll(globalIndex).select(&ic_);
+                keyEvent.filterAndAccept();
+                return;
+            }
+        }
+
+        if (commonList && !commonList->empty()) {
+            int  globalCursorIndex = commonList->globalCursorIndex();
+            int  totalSize         = commonList->totalSize();
+            int  currentPage       = commonList->currentPage();
+            int  pageSize          = commonList->pageSize();
+            int  localCursorIndex  = globalCursorIndex - (currentPage * pageSize);
+
+            bool handled = false;
+
+            switch (currentSym) {
+                case FcitxKey_Tab:
+                case FcitxKey_Down: {
+                    if (localCursorIndex < pageSize - 1 && globalCursorIndex < totalSize - 1) {
+                        commonList->setGlobalCursorIndex(globalCursorIndex + 1);
+                    } else {
+                        commonList->setGlobalCursorIndex(currentPage * pageSize);
+                    }
+                    handled = true;
+                    break;
+                }
+
+                case FcitxKey_ISO_Left_Tab:
+                case FcitxKey_Up: {
+                    if (localCursorIndex > 0) {
+                        commonList->setGlobalCursorIndex(globalCursorIndex - 1);
+                    } else {
+                        int lastIndex = std::min((currentPage * pageSize) + pageSize - 1, totalSize - 1);
+                        commonList->setGlobalCursorIndex(lastIndex);
+                    }
+                    handled = true;
+                    break;
+                }
+                case FcitxKey_Page_Down:
+                case FcitxKey_Right: {
+                    if (commonList->hasNext()) {
+                        commonList->next();
+                        int newPage = commonList->currentPage();
+                        commonList->setGlobalCursorIndex(newPage * pageSize);
+                        handled = true;
+                    }
+                    break;
+                }
+                case FcitxKey_Page_Up:
+                case FcitxKey_Left: {
+                    if (commonList->hasPrev()) {
+                        commonList->prev();
+                        int newPage = commonList->currentPage();
+                        commonList->setGlobalCursorIndex(newPage * pageSize);
+                        handled = true;
+                    }
+                    break;
+                }
+                default: break;
+            }
+
+            if (handled) {
+                updateEmojiPageStatus(commonList.get());
+                ic_.updateUserInterface(UserInterfaceComponent::InputPanel);
+                keyEvent.filterAndAccept();
+                return;
+            }
+        }
+
+        if (isBackspace(currentSym)) {
+            if (!emojiBuffer_.empty()) {
+                if (isCtrlBackspace) {
+                    emojiBuffer_.clear();
+                } else {
+                    emojiBuffer_.pop_back();
+                }
+                keyEvent.filterAndAccept();
+            } else {
+                keyEvent.forward();
+            }
+            updateEmojiPreedit();
+            return;
+        }
+
+        switch (currentSym) {
+            case FcitxKey_space:
+            case FcitxKey_Return: {
+                if (commonList && !commonList->empty()) {
+                    int globalIdx = commonList->globalCursorIndex();
+                    commonList->candidateFromAll(globalIdx).select(&ic_);
+                    keyEvent.filterAndAccept();
+                } else if (currentSym == FcitxKey_Return && !emojiBuffer_.empty()) {
+                    vnkey::fcitx_text::commit(&ic_, emojiBuffer_, lastCommitTime_);
+                    emojiBuffer_.clear();
+                    updateEmojiPreedit();
+                    keyEvent.filterAndAccept();
+                } else {
+                    keyEvent.forward();
+                }
+                return;
+            }
+
+            case FcitxKey_Escape: {
+                emojiBuffer_.clear();
+                emojiCandidates_.clear();
+                ic_.inputPanel().reset();
+                ic_.updateUserInterface(UserInterfaceComponent::InputPanel);
+                keyEvent.filterAndAccept();
+                return;
+            }
+
+            default: break;
+        }
+
+        {
+            const uint32_t codePoint = Key::keySymToUnicode(currentSym);
+            if (codePoint != 0U) {
+                emojiBuffer_.push_back(static_cast<char32_t>(codePoint));
+                keyEvent.filterAndAccept();
+                updateEmojiPreedit();
+            } else {
+                keyEvent.forward();
+            }
+        }
+    }
+    void VNKeyState::updateEmojiPreedit() {
+        if (emojiBuffer_.empty()) {
+            emojiCandidates_ = engine_.emojiLoader().history();
+            if (emojiCandidates_.empty()) {
+                ic_.inputPanel().reset();
+                ic_.updatePreedit();
+                ic_.updateUserInterface(UserInterfaceComponent::InputPanel);
+                return;
+            }
+        } else {
+            emojiCandidates_ = engine_.emojiLoader().search(vnkey::utf8::encode(emojiBuffer_));
+        }
+
+        if (!emojiBuffer_.empty()) {
+            Text preeditText;
+            preeditText.append(vnkey::utf8::encode(emojiBuffer_), TextFormatFlag::Underline);
+            preeditText.setCursor(static_cast<int>(preeditText.textLength()));
+            ic_.inputPanel().setPreedit(preeditText);
+        } else {
+            ic_.inputPanel().setClientPreedit(Text());
+            ic_.inputPanel().setPreedit(Text());
+        }
+
+        if (!emojiCandidates_.empty()) {
+            auto candidateList = std::make_unique<CommonCandidateList>();
+            candidateList->setLayoutHint(CandidateLayoutHint::Vertical);
+            candidateList->setPageSize(9);
+
+            for (size_t i = 0; i < emojiCandidates_.size(); ++i) {
+                size_t localIndex = (i % 9) + 1;
+                Text   displayLabel;
+                if (emojiBuffer_.empty()) {
+                    displayLabel.append(std::to_string(localIndex) + ": " + emojiCandidates_[i].output, TextFormatFlag::NoFlag);
+                } else {
+                    displayLabel.append(std::to_string(localIndex) + ": " + emojiCandidates_[i].trigger + " " + emojiCandidates_[i].output, TextFormatFlag::NoFlag);
+                }
+                candidateList->append(std::make_unique<EmojiCandidateWord>(displayLabel, this, emojiCandidates_[i]));
+            }
+            candidateList->setGlobalCursorIndex(0);
+
+            ic_.inputPanel().setCandidateList(std::move(candidateList));
+            auto currentList = std::dynamic_pointer_cast<CommonCandidateList>(ic_.inputPanel().candidateList());
+            updateEmojiPageStatus(currentList.get());
+        } else {
+            ic_.inputPanel().setCandidateList(nullptr);
+        }
+
+        ic_.updatePreedit();
+        ic_.updateUserInterface(UserInterfaceComponent::InputPanel);
+    }
+
+    void VNKeyState::finishReplacement(KeyEvent& event) {
+        event.filterAndAccept();
+        finishReplacementNow();
+    }
+
+    void VNKeyState::finishReplacementNow() {
+        ++replacementToken_;
+        cancelSelectAbort();
+        appendCommit(pendingCommitString_);
+        pendingCommitString_.clear();
+        deferCommits_          = getFrontendName(&ic_) == "dbus";
+        expectedBackspaces_    = 0;
+        currentBackspaceCount_ = 0;
+        replacementDeadlineMs_ = 0;
+        realSelect_            = false;
+        g_isDeleting.store(false, std::memory_order_release);
+        if (deferCommits_) {
+            flushCommitBatch();
+        } else {
+            replayBufferedKeys();
+            flushCommitBatch();
+        }
+    }
+
+    void VNKeyState::finishScheduledReplacement(uint64_t token) {
+        if (token != replacementToken_ || !g_isDeleting.load(std::memory_order_acquire)) {
+            return;
+        }
+        finishReplacementNow();
+    }
+
+    bool VNKeyState::handleUInputKeyPress(KeyEvent& event, KeySym currentSym) {
+        if (!g_isDeleting.load(std::memory_order_acquire)) {
+            return false;
+        }
+        // In Select mode the uinput server emits Shift+Left, so the echoed Left
+        // presses are the selection signal. The final one is swallowed in
+        // finishReplacement so the app only sees the count it should select.
+        if (!isBackspace(currentSym) && (!realSelect_ || currentSym != FcitxKey_Left) && !(currentSym == FcitxKey_Pause)) {
+            return false;
+        }
+        if (currentSym != FcitxKey_Pause) {
+            if (currentBackspaceCount_ < expectedBackspaces_) {
+                currentBackspaceCount_ += 1;
+            }
+            // Re-arm the deadline so a slow burst is never abandoned.
+            replacementDeadlineMs_ = nowMs() + replacementEchoGrace_;
+            // Injected backend: the last echoed backspace or Left is the trigger, commit on it.
+            const bool injectedEcho = echoTriggerPending_ && (realSelect_ ? currentSym == FcitxKey_Left : isBackspace(currentSym));
+            if (injectedEcho && currentBackspaceCount_ >= expectedBackspaces_) {
+                echoTriggerPending_ = false;
+                // Let the app finish the backspaces and the focus bounce before
+                // commit. Consume the echoed trigger now and let the backend
+                // worker wait the post-delay, so the fcitx main thread keeps
+                // processing key presses while it elapses.
+                const int postMs = clampDelay(appRuleSetting_.postDelay > 0 ? appRuleSetting_.postDelay : *engine_.config().defaultPostDelay);
+                event.filterAndAccept();
+                const uint64_t token  = replacementToken_;
+                auto           icRef  = ic_.watch();
+                VNKeyEngine*   engine = &engine_;
+                scheduleAfterInjection(postMs, [engine, icRef, token] {
+                    engine->scheduleOnMainThread([engine, icRef, token] {
+                        if (auto* state = engine->stateFor(icRef.get())) {
+                            state->finishScheduledReplacement(token);
+                        }
+                    });
+                });
+                return true;
+            }
+            return false; // Allow intermediate backspaces/lefts to reach the app to clear autofill/old text / extend the selection.
+        }
+        // The anchor closes the burst even if echoes are lost.
+        currentBackspaceCount_ += 1;
+        finishReplacement(event);
+        return true;
+    }
+
+    void VNKeyState::performReplacement(DiffPart diffPart) {
+        VNKEY_INFO("Perform replacement: " + vnkey::utf8::encode(diffPart.deletedPart) + " -> " + vnkey::utf8::encode(diffPart.addedPart)); //NOLINT
+        echoTriggerPending_ = false;
+        ++replacementToken_;
+        // WA for libreoffice (issue #162)
+        // force use deleteSurroundingText func
+        if (isLibreoffice_) {
+            const int delSize = static_cast<int>(diffPart.deletedPart.size());
+            if (delSize > 0) {
+                ic_.deleteSurroundingText(-delSize, delSize);
+            }
+            vnkey::fcitx_text::commit(&ic_, diffPart.addedPart, lastCommitTime_);
+            return;
+        }
+
+        const size_t delSize      = diffPart.deletedPart.size();
+        const bool   autofill     = isAutofillCertain(ic_.surroundingText());
+        const bool   addressBar   = isChromium_ && (ic_.capabilityFlags().test(CapabilityFlag::Url) || engine_.isLikeAddressBarChromium());
+        const bool   uinputSelect = (currentMode() == VNKeyMode::Select && !autofill) || (isUinputMode(currentMode()) && addressBar);
+
+        const int    commitMs = clampDelay(appRuleSetting_.commitInterval > 0 ? appRuleSetting_.commitInterval : *engine_.config().defaultCommitInterval);
+        const auto   interval =
+            static_cast<uint32_t>(clampDelay(appRuleSetting_.backspaceInterval > 0 ? appRuleSetting_.backspaceInterval : *engine_.config().defaultBackspaceInterval));
+        const auto postDelay = static_cast<uint32_t>(clampDelay(appRuleSetting_.postDelay > 0 ? appRuleSetting_.postDelay : *engine_.config().defaultPostDelay));
+        uint32_t   preDelay  = 0;
+        if (lastCommitTime_.time_since_epoch().count() > 0) {
+            auto now       = std::chrono::steady_clock::now();
+            auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastCommitTime_).count();
+            if (elapsedMs < commitMs) {
+                preDelay = static_cast<uint32_t>(commitMs - elapsedMs);
+            }
+        }
+
+        const std::string frontend     = getFrontendName(&ic_);
+        const bool        echoFrontend = frontend == "dbus" || frontend == "fcitx4" || frontend == "x11" || frontend == "xim";
+        const std::string addedUtf8    = vnkey::utf8::encode(diffPart.addedPart);
+        const int         burstCount   = static_cast<int>(delSize) + ((currentMode() != VNKeyMode::SuperSmooth && autofill) ? 1 : 0);
+        const bool        x11Backend   = !vkUsable() && x11Usable();
+        bool              echoDriven   = false;
+        injectionBackend_              = InjectionBackend::None;
+
+        bool selectMode = uinputSelect;
+        if (selectMode && x11Backend && VNKeyX11Keyboard::shiftHeld()) {
+            // Xtest shares the server modifier state with the user's keyboard: a Shift we press and release would
+            // release the user's own Shift, so Select falls back to BackSpace like the uinput server does.
+            VNKEY_INFO("x11-keyboard: physical Shift is held, backspacing instead of selecting");
+            selectMode = false;
+        }
+
+        if (vkUsable()) {
+            echoDriven = echoFrontend;
+            if (!echoDriven) {
+                auto&      wlr = VNKeyWlrVirtualKeyboard::instance();
+                const bool ok  = uinputSelect ? wlr.emitSelect(burstCount, addedUtf8) : wlr.emit(burstCount, addedUtf8);
+                if (ok) {
+                    VNKEY_INFO(std::string("wlr-virtual-keyboard: sent ") + (uinputSelect ? "Shift+Left" : "backspaces") + " + keys for [" + addedUtf8 + "]");
+                    return;
+                }
+                VNKEY_WARN("wlr-virtual-keyboard emit failed, fallback use uinput");
+            } else {
+                injectionBackend_ = InjectionBackend::WlrVirtualKeyboard;
+            }
+        } else if (x11Backend) {
+            echoDriven = echoFrontend;
+            if (!echoDriven) {
+                if (VNKeyX11Keyboard::instance().emit(burstCount, addedUtf8, static_cast<int>(interval), selectMode)) {
+                    VNKEY_INFO(std::string("x11-keyboard: sent ") + (selectMode ? "Shift+Left" : "backspaces") + " + keys for [" + addedUtf8 + "]");
+                    return;
+                }
+                VNKEY_WARN("x11-keyboard emit failed, fallback use uinput");
+            } else {
+                injectionBackend_ = InjectionBackend::X11Test;
+            }
+        }
+
+        const size_t uinputCount = delSize + ((currentMode() != VNKeyMode::SuperSmooth && autofill) ? 1 : 0);
+
+        currentBackspaceCount_ = 0;
+        pendingCommitString_   = diffPart.addedPart;
+        // Echo-driven backends: the extra last backspace/Left is the trigger, it is swallowed and commits
+        expectedBackspaces_ = echoDriven ? delSize + ((currentMode() != VNKeyMode::SuperSmooth && autofill) ? 1 : 0) + 1 : uinputCount;
+        realSelect_         = selectMode;
+        lastSelect_         = realSelect_;
+        g_isDeleting.store(true, std::memory_order_release);
+
+        const int64_t injectMs = static_cast<int64_t>(expectedBackspaces_) * static_cast<int64_t>(interval);
+        replacementDeadlineMs_ = nowMs() + static_cast<int64_t>(preDelay) + injectMs + static_cast<int64_t>(postDelay) + kReplacementAckSlackMs;
+        replacementEchoGrace_  = static_cast<int64_t>(interval) + static_cast<int64_t>(postDelay) + kReplacementAckSlackMs;
+        burstIntervalMs_       = interval;
+
+        if (injectionBackend_ != InjectionBackend::None) {
+            echoTriggerPending_ = true;
+            if (preDelay > 0) {
+                // The previous commit may still be in flight over dbus: wait before the backspaces.
+                const uint64_t token  = replacementToken_;
+                auto           icRef  = ic_.watch();
+                VNKeyEngine*   engine = &engine_;
+                const size_t   count  = expectedBackspaces_;
+                const bool     select = selectMode;
+                scheduleAfterInjection(static_cast<int>(preDelay), [engine, icRef, token, count, select] {
+                    engine->scheduleOnMainThread([engine, icRef, token, count, select] {
+                        auto* state = engine->stateFor(icRef.get());
+                        if (state == nullptr || token != state->replacementToken_ || !g_isDeleting.load(std::memory_order_acquire)) {
+                            return;
+                        }
+                        if (!state->injectEchoBurst(count, select)) {
+                            state->echoTriggerPending_ = false;
+                            state->finishReplacementNow();
+                        }
+                    });
+                });
+                return;
+            }
+            if (injectEchoBurst(expectedBackspaces_, selectMode)) {
+                return;
+            }
+            VNKEY_WARN("injected burst failed, fallback use uinput");
+            echoTriggerPending_ = false;
+            injectionBackend_   = InjectionBackend::None;
+            expectedBackspaces_ = uinputCount;
+        }
+        // Select mode: the uinput server selects with Shift+Left instead. The
+        // trigger-key compensation above still applies because the last echoed
+        // Left is swallowed; autofill compensation does not, see above.
+        if (realSelect_) {
+            sendSelectUinput(expectedBackspaces_, preDelay, interval, postDelay);
+            VNKEY_INFO("Send select of " + std::to_string(expectedBackspaces_) + " characters");
+            return;
+        }
+        sendBackspaceUinput(expectedBackspaces_, preDelay, interval, postDelay);
+        VNKEY_INFO("Send " + std::to_string(expectedBackspaces_) + " backspaces");
+    }
+
+    bool VNKeyState::injectEchoBurst(size_t count, bool select) {
+        switch (injectionBackend_) {
+            case InjectionBackend::WlrVirtualKeyboard: {
+                auto& wlr = VNKeyWlrVirtualKeyboard::instance();
+                return select ? wlr.emitSelect(static_cast<int>(count), "", false) : wlr.emit(static_cast<int>(count), "", false);
+            }
+            case InjectionBackend::X11Test: return VNKeyX11Keyboard::instance().emit(static_cast<int>(count), "", static_cast<int>(burstIntervalMs_), select);
+            case InjectionBackend::None: break;
+        }
+        return false;
+    }
+
+    void VNKeyState::scheduleAfterInjection(int delayMs, std::function<void()> task) {
+        if (injectionBackend_ == InjectionBackend::X11Test) {
+            VNKeyX11Keyboard::instance().runAfter(delayMs, std::move(task));
+        } else {
+            VNKeyWlrVirtualKeyboard::instance().runAfter(delayMs, std::move(task));
+        }
+    }
+
+    bool VNKeyState::checkForwardSpecialKey(KeyEvent& keyEvent, KeySym& currentSym) {
+        if (keyEvent.key().isCursorMove() || currentSym == FcitxKey_Tab || currentSym == FcitxKey_KP_Tab || currentSym == FcitxKey_ISO_Left_Tab || currentSym == FcitxKey_Escape ||
+            keyEvent.key().hasModifier()) {
+            g_isDeleting.store(false, std::memory_order_release);
+            expectedBackspaces_    = 0;
+            currentBackspaceCount_ = 0;
+            replacementDeadlineMs_ = 0;
+            pendingCommitString_.clear();
+            hasHistory_ = false;
+            (*vnkeyEngine_).reset();
+            oldPreBuffer_.clear();
+            return true;
+        }
+
+        if (currentSym == FcitxKey_Delete) {
+            return true;
+        }
+
+        if (currentSym >= FcitxKey_KP_0 && currentSym <= FcitxKey_KP_9) {
+            currentSym = static_cast<KeySym>(FcitxKey_0 + (currentSym - FcitxKey_KP_0));
+            return false;
+        }
+
+        switch (currentSym) {
+            case FcitxKey_KP_Add: {
+                currentSym = FcitxKey_plus;
+                break;
+            }
+            case FcitxKey_KP_Subtract: {
+                currentSym = FcitxKey_minus;
+                break;
+            }
+            case FcitxKey_KP_Divide: {
+                currentSym = FcitxKey_slash;
+                break;
+            }
+            case FcitxKey_KP_Multiply: {
+                currentSym = FcitxKey_asterisk;
+                break;
+            }
+            case FcitxKey_KP_Decimal: {
+                currentSym = FcitxKey_period;
+                break;
+            }
+            case FcitxKey_KP_Enter: {
+                currentSym = FcitxKey_Return;
+                break;
+            }
+            case FcitxKey_KP_Equal: {
+                currentSym = FcitxKey_equal;
+                break;
+            }
+            case FcitxKey_KP_Space: {
+                currentSym = FcitxKey_space;
+                break;
+            }
+            default: break;
+        }
+        return false;
+    }
+
+    bool VNKeyState::forwardSpecialKey(KeyEvent& keyEvent, KeySym& currentSym) {
+        if (checkForwardSpecialKey(keyEvent, currentSym)) {
+            keyEvent.forward();
+            return true;
+        }
+        return false;
+    }
+
+    void VNKeyState::commitOrReplace(DiffPart diffPart, const std::string& logMsg) {
+        // Only used by optional double-space and double-hyphen replacements.
+        // Both currently delete exactly one code point; normal typing uses
+        // separate mode-specific handlers.
+        if (currentMode() == VNKeyMode::SurroundingText) {
+            ic_.deleteSurroundingText(-1, 1);
+            vnkey::fcitx_text::commit(&ic_, diffPart.addedPart, lastCommitTime_);
+        } else { // Uinput, Smooth, Preedit, etc.
+            performReplacement(diffPart);
+        }
+        VNKEY_INFO(logMsg);
+    }
+
+    std::u32string VNKeyState::pullCommitString() {
+        return vnkeyEngine_->takeCommit();
+    }
+
+    std::u32string VNKeyState::pullPreeditString() {
+        return vnkeyEngine_->preedit();
+    }
+
+    void VNKeyState::handleUinputMode(KeyEvent& keyEvent, KeySym currentSym) {
+        if (forwardSpecialKey(keyEvent, currentSym))
+            return;
+
+        if (!injectionUsable() && !engine_.kbSender().connected()) {
+            setupUinput();
+        }
+
+        if (isBackspace(currentSym) || currentSym == FcitxKey_Return) {
+            if (isBackspace(currentSym)) {
+                hasHistory_ = true;
+                vnkeyEngine_->processKey(FcitxKey_BackSpace, {});
+                oldPreBuffer_ = pullPreeditString();
+            } else {
+                hasHistory_ = false;
+                (*vnkeyEngine_).reset();
+                oldPreBuffer_.clear();
+            }
+            keyEvent.forward();
+            return;
+        }
+
+        const uint32_t keyCodePoint = Key::keySymToUnicode(currentSym);
+        if (keyCodePoint == 0U) {
+            keyEvent.forward();
+            return;
+        }
+        const std::u32string keyText(1, static_cast<char32_t>(keyCodePoint));
+
+        bool                 processed = vnkeyEngine_->processKey(engineKeyValue(currentSym), vnkey::keyStatesFromBits(static_cast<uint32_t>(keyEvent.rawKey().states())));
+
+        const std::u32string commitStr = pullCommitString();
+        if (!commitStr.empty()) {
+            DiffPart diffPart = compareAndSplitU32(oldPreBuffer_, commitStr);
+
+            if (!diffPart.deletedPart.empty()) {
+                performReplacement(diffPart);
+                keyEvent.filterAndAccept();
+            } else {
+                bool wasAutoCapitalized = (currentSym != keyEvent.rawKey().sym());
+                if (!diffPart.addedPart.empty() && (keyText != diffPart.addedPart || wasAutoCapitalized)) {
+                    vnkey::fcitx_text::commit(&ic_, diffPart.addedPart, lastCommitTime_);
+                    keyEvent.filterAndAccept();
+                } else {
+                    keyEvent.forward();
+                }
+            }
+
+            hasHistory_ = false;
+            (*vnkeyEngine_).reset();
+            oldPreBuffer_.clear();
+
+            return;
+        }
+
+        if (!processed) {
+            const std::u32string preeditCurrent = pullPreeditString();
+            if (preeditCurrent.empty()) {
+                hasHistory_ = false;
+                (*vnkeyEngine_).reset();
+                oldPreBuffer_.clear();
+                keyEvent.forward();
+            }
+            return;
+        }
+
+        hasHistory_ = true;
+        g_realTextLen.fetch_add(1, std::memory_order_acq_rel);
+
+        const std::u32string preeditStr = pullPreeditString();
+
+        DiffPart             diffPart = compareAndSplitU32(oldPreBuffer_, preeditStr);
+        if (diffPart.deletedPart.empty()) {
+            bool isCommit           = false;
+            bool wasAutoCapitalized = (currentSym != keyEvent.rawKey().sym());
+            if (!diffPart.addedPart.empty()) {
+                oldPreBuffer_ = preeditStr;
+                if (wasAutoCapitalized || diffPart.addedPart != keyText) {
+                    vnkey::fcitx_text::commit(&ic_, diffPart.addedPart, lastCommitTime_);
+                    keyEvent.filterAndAccept();
+                    isCommit = true;
+                }
+            }
+            if (!isCommit) {
+                keyEvent.forward();
+            }
+            return;
+        }
+
+        if (!injectionUsable() && !engine_.kbSender().connected()) {
+            VNKEY_ERROR("Cannot connect to uinput server, commit rawkey");
+            std::string rawKey = keyEvent.key().toString();
+            if (!rawKey.empty()) {
+                ic_.commitString(rawKey);
+            }
+            return;
+        }
+
+        if (g_isDeleting.load(std::memory_order_acquire)) {
+            g_isDeleting.store(false, std::memory_order_release);
+        }
+
+        keyEvent.filterAndAccept();
+        performReplacement(diffPart);
+        oldPreBuffer_ = preeditStr;
+    }
+
+    void VNKeyState::handleSurroundingText(KeyEvent& keyEvent, KeySym currentSym) {
+        if (forwardSpecialKey(keyEvent, currentSym))
+            return;
+        auto* ic = keyEvent.inputContext();
+        if ((ic == nullptr) || !ic->capabilityFlags().test(CapabilityFlag::SurroundingText)) {
+            VNKEY_WARN("Surrounding text not supported");
+            keyEvent.forward();
+            return;
+        }
+
+        const auto& surrounding = ic->surroundingText();
+        if (!surrounding.isValid()) {
+            VNKEY_WARN("Surrounding text is invalid");
+            keyEvent.forward();
+            return;
+        }
+
+        if (isBackspace(keyEvent.rawKey().sym())) {
+            (*vnkeyEngine_).reset();
+            keyEvent.forward();
+            return;
+        }
+
+        const std::string& text   = surrounding.text();
+        const unsigned int cursor = std::min(surrounding.anchor(), surrounding.cursor());
+
+        const size_t       textLen = vnkey::utf8::length(text);
+
+        if (cursor <= 0 || cursor > textLen) {
+            processNormalKey(keyEvent, currentSym);
+            return;
+        }
+
+        {
+            // The whole surrounding text is never decoded: the byte scan stops after kMaxScanLength
+            // code points before the cursor, and only that slice is decoded for the engine.
+            auto startIter = utf8::nextNChar(text.begin(), cursor);
+            auto endIter   = startIter;
+
+            int  scanCount = 0;
+            while (startIter != text.begin() && scanCount < kMaxScanLength) {
+                auto prev = startIter;
+                if (prev != text.begin()) {
+                    --prev;
+                    while (prev != text.begin() && ((static_cast<unsigned char>(*prev) & 0xC0U) == 0x80)) {
+                        --prev;
+                    }
+                }
+
+                const uint32_t ucs4 = utf8::getChar(prev, text.end());
+
+                if (isWordBreak(ucs4))
+                    break;
+
+                startIter = prev;
+                ++scanCount;
+            }
+
+            const std::string oldWordText(startIter, endIter);
+
+            if (oldWordText.empty()) {
+                processNormalKey(keyEvent, currentSym);
+                return;
+            }
+
+            const std::u32string oldWord = vnkey::utf8::decode(oldWordText);
+
+            vnkeyEngine_->rebuildFromText(oldWord);
+
+            bool processed = vnkeyEngine_->processKey(engineKeyValue(currentSym), vnkey::keyStatesFromBits(static_cast<uint32_t>(keyEvent.rawKey().states())));
+
+            if (!processed) {
+                keyEvent.forward();
+                (*vnkeyEngine_).reset();
+                return;
+            }
+
+            std::u32string newWord = pullCommitString();
+            newWord += pullPreeditString();
+
+            DiffPart diffPart = compareAndSplitU32(oldWord, newWord);
+            // Only a pure append of the typed key can go straight to the client. When the whole old
+            // word is replaced by the key ("ư" + "w" -> "w"), the old word must still be deleted.
+            if (diffPart.deletedPart.empty() && diffPart.addedPart == vnkey::utf8::decode(keyEvent.key().toString())) {
+                (*vnkeyEngine_).reset();
+                keyEvent.forward();
+                return;
+            }
+
+            if (!diffPart.deletedPart.empty() || !diffPart.addedPart.empty()) {
+                const size_t charsToDelete = diffPart.deletedPart.size();
+
+                if (charsToDelete > 0) {
+                    ic->deleteSurroundingText(-static_cast<int>(charsToDelete), static_cast<int>(charsToDelete));
+                }
+
+                if (!diffPart.addedPart.empty()) {
+                    vnkey::fcitx_text::commit(ic, diffPart.addedPart, lastCommitTime_);
+                }
+
+                (*vnkeyEngine_).reset();
+                keyEvent.filterAndAccept();
+                return;
+            }
+
+            (*vnkeyEngine_).reset();
+            keyEvent.filterAndAccept();
+            return;
+        }
+    }
+
+    void VNKeyState::processNormalKey(KeyEvent& keyEvent, KeySym currentSym) {
+        auto* ic = keyEvent.inputContext();
+        (*vnkeyEngine_).reset();
+        bool processed = vnkeyEngine_->processKey(engineKeyValue(currentSym), vnkey::keyStatesFromBits(static_cast<uint32_t>(keyEvent.rawKey().states())));
+        if (processed) {
+            std::u32string out = pullCommitString();
+            out += pullPreeditString();
+
+            if (!out.empty()) {
+                vnkey::fcitx_text::commit(ic, out, lastCommitTime_);
+            }
+
+            (*vnkeyEngine_).reset();
+            keyEvent.filterAndAccept();
+        } else {
+            keyEvent.forward();
+        }
+    }
+
+    void VNKeyState::handleDoubleSpaceReplacement() {
+        commitOrReplace({.deletedPart = U" ", .addedPart = U". "}, "Commit: . ");
+        if (*engine_.config().autoCapitalizeAfterPunctuation) {
+            isPrevPunctuation_ = true;
+            shouldCapitalize_  = true;
+        }
+    }
+
+    void VNKeyState::handleDoubleHyphenReplacement() {
+        commitOrReplace({.deletedPart = U"-", .addedPart = U"—"}, "Commit: — (em-dash)");
+    }
+
+    void VNKeyState::handleOffModeMacro(KeyEvent& keyEvent, KeySym currentSym) {
+        if (forwardSpecialKey(keyEvent, currentSym))
+            return;
+
+        if (!injectionUsable() && !engine_.kbSender().connected()) {
+            engine_.kbSender().ensureConnected();
+        }
+
+        if (isBackspace(currentSym)) {
+            vnkeyEngine_->processKey(FcitxKey_BackSpace, {});
+            oldPreBuffer_ = pullPreeditString();
+            keyEvent.forward();
+            return;
+        }
+
+        if (currentSym == FcitxKey_Return) {
+            if (!oldPreBuffer_.empty()) {
+                (*vnkeyEngine_).reset();
+                oldPreBuffer_.clear();
+            }
+            keyEvent.forward();
+            return;
+        }
+
+        const uint32_t       keyCodePoint = Key::keySymToUnicode(currentSym);
+        const std::u32string keyText      = keyCodePoint != 0U ? std::u32string(1, static_cast<char32_t>(keyCodePoint)) : std::u32string{};
+
+        bool                 processed = vnkeyEngine_->processKey(engineKeyValue(currentSym), vnkey::keyStatesFromBits(static_cast<uint32_t>(keyEvent.rawKey().states())));
+
+        const std::u32string commitStr = pullCommitString();
+        if (processed && !commitStr.empty()) {
+
+            bool isMacroExpansion = false;
+            if (keyText.empty()) {
+                isMacroExpansion = (commitStr != oldPreBuffer_);
+            } else {
+                isMacroExpansion = (commitStr != oldPreBuffer_ + keyText);
+            }
+
+            if (isMacroExpansion) {
+                VNKEY_INFO("Macro expansion: '" + vnkey::utf8::encode(oldPreBuffer_) + "' -> '" + vnkey::utf8::encode(commitStr) + "'");
+                // Try uinput replacement first, fallback to deleteSurroundingText, then plain commit
+                if ((injectionUsable() || engine_.kbSender().connected()) && !oldPreBuffer_.empty()) {
+                    performReplacement({.deletedPart = oldPreBuffer_, .addedPart = commitStr});
+                } else if (ic_.capabilityFlags().test(CapabilityFlag::SurroundingText)) {
+                    const auto& surrounding = ic_.surroundingText();
+                    if (surrounding.isValid()) {
+                        const size_t oldLen = oldPreBuffer_.size();
+                        if (oldLen > 0) {
+                            ic_.deleteSurroundingText(-static_cast<int>(oldLen), static_cast<int>(oldLen));
+                        }
+                        vnkey::fcitx_text::commit(&ic_, commitStr, lastCommitTime_);
+                    } else {
+                        vnkey::fcitx_text::commit(&ic_, commitStr, lastCommitTime_);
+                    }
+                } else {
+                    vnkey::fcitx_text::commit(&ic_, commitStr, lastCommitTime_);
+                }
+                keyEvent.filterAndAccept();
+            } else {
+                // No macro: typed text confirmed by engine, just forward trigger key
+                keyEvent.forward();
+            }
+
+            oldPreBuffer_.clear();
+            hasHistory_ = false;
+            return;
+        }
+
+        if (processed || !commitStr.empty()) {
+            // Engine processed the key (building shadow state)
+            // OR engine rejected the key but committed old text (non-processable key)
+            oldPreBuffer_ = pullPreeditString();
+            if (!processed) {
+                // Engine committed old text but didn't process the new key → forward the key
+                oldPreBuffer_.clear();
+                hasHistory_ = false;
+            }
+            keyEvent.forward();
+        } else {
+            // Engine didn't handle this key
+            if (!oldPreBuffer_.empty()) {
+                (*vnkeyEngine_).reset();
+                oldPreBuffer_.clear();
+            }
+            keyEvent.forward();
+        }
+    }
+
+    bool VNKeyState::handleKeyEventGuards(KeyEvent& keyEvent) {
+        if (!vnkeyEngine_)
+            return true;
+        // Only the wlroots backend leaves echoes that have to be matched by keycode and forwarded. Xtest keys come
+        // back through the XIM/dbus frontend like uinput keys and are counted by handleUInputKeyPress.
+        if (injectionBackend_ != InjectionBackend::X11Test) {
+            auto& vk = VNKeyWlrVirtualKeyboard::instance();
+            if (vk.injecting()) {
+                keyEvent.filterAndAccept();
+                return true;
+            }
+            if (vk.consumeEcho(static_cast<uint32_t>(keyEvent.rawKey().code()), static_cast<uint32_t>(keyEvent.time()))) {
+                keyEvent.forward();
+                return true;
+            }
+        }
+        if (currentMode() == VNKeyMode::Preedit) {
+            if (keyEvent.rawKey().check(FcitxKey_Shift_L) || keyEvent.rawKey().check(FcitxKey_Shift_R))
+                return true;
+        } else {
+            if (keyEvent.rawKey().isModifier() && !g_isDeleting.load(std::memory_order_acquire)) {
+                handleModifierTap(keyEvent);
+                return true;
+            }
+            cancelModifierTap();
+        }
+        if (keyEvent.isRelease())
+            return true;
+        return false;
+    }
+
+    void VNKeyState::keyEvent(KeyEvent& keyEvent) {
+        VNKEY_DEBUG("Key " + keyEvent.rawKey().toString() + (keyEvent.isRelease() ? " up" : " down") + " states=0x" +
+                    [](uint32_t v) { char b[16]; std::snprintf(b, sizeof b, "%x", v); return std::string(b); }(static_cast<uint32_t>(keyEvent.rawKey().states())) +
+                    " sym=" + std::to_string(keyEvent.rawKey().sym()));
+        trackShiftModifier(keyEvent);
+        if (handleKeyEventGuards(keyEvent))
+            return;
+        if (mouseClickWatchdog_) {
+            cancelMouseClickWatchdog();
+            if (currentMode() == VNKeyMode::Preedit && !pullPreeditString().empty()) {
+                reset();
+            }
+        }
+        ensureUinputConnection();
+        completePendingReplacement();
+        finishOverdueReplacement();
+
+        if (g_mouseClicked.load(std::memory_order_acquire) && !g_isDeleting.load(std::memory_order_acquire)) {
+            g_mouseClicked.store(false, std::memory_order_release);
+            if (mouseClickAction(currentMode()) == MouseClickAction::ClearBuffers) {
+                clearAllBuffers();
+            }
+        }
+        reconcileAbortedUinputReplacement();
+        KeySym currentSym = keyEvent.rawKey().sym();
+        applyAutoCapitalize(keyEvent, currentSym);
+
+        if (handleKeyWhileDeleting(keyEvent, currentSym))
+            return;
+
+        if (handleDoubleSpaceToPeriod(keyEvent, currentSym))
+            return;
+
+        if (handleDoubleHyphenToEmDash(keyEvent, currentSym))
+            return;
+
+        handleActiveMode(keyEvent, currentSym);
+        reEnableMacroAfterWordEnd();
+    }
+
+    void VNKeyState::ensureUinputConnection() {
+        if (!injectionUsable() && !engine_.kbSender().connected()) {
+            VNKEY_WARN("Cannot connect to uinput server, reconnecting....");
+            engine_.kbSender().ensureConnected();
+        }
+    }
+
+    void VNKeyState::completePendingReplacement() {
+        if (currentBackspaceCount_ > expectedBackspaces_ && g_isDeleting.load(std::memory_order_acquire)) {
+            g_isDeleting.store(false, std::memory_order_release);
+            currentBackspaceCount_ = 0;
+            expectedBackspaces_    = 0;
+            replacementDeadlineMs_ = 0;
+            realSelect_            = false;
+            if (!bufferedKeys_.empty()) {
+                deferCommits_ = getFrontendName(&ic_) == "dbus";
+                replayBufferedKeys();
+                flushCommitBatch();
+            }
+        }
+    }
+
+    void VNKeyState::finishOverdueReplacement() {
+        if (replacementDeadlineMs_ == 0 || nowMs() < replacementDeadlineMs_) {
+            return;
+        }
+        replacementDeadlineMs_ = 0;
+        if (!g_isDeleting.load(std::memory_order_acquire)) {
+            return;
+        }
+
+        cancelPendingUinput();
+        VNKEY_WARN("Replacement ack timed out, finishing without the remaining backspace echoes");
+        appendCommit(pendingCommitString_);
+        pendingCommitString_.clear();
+        expectedBackspaces_    = 0;
+        currentBackspaceCount_ = 0;
+        deletionInterruptedAt_ = 0;
+        realSelect_            = false;
+        g_isDeleting.store(false, std::memory_order_release);
+
+        (*vnkeyEngine_).reset();
+        oldPreBuffer_.clear();
+        hasHistory_   = false;
+        deferCommits_ = getFrontendName(&ic_) == "dbus";
+        if (deferCommits_) {
+            flushCommitBatch();
+        } else {
+            replayBufferedKeys();
+            flushCommitBatch();
+        }
+    }
+
+    void VNKeyState::applyAutoCapitalize(KeyEvent& keyEvent, KeySym& currentSym) {
+        if (*engine_.config().autoCapitalizeAfterPunctuation && currentMode() != VNKeyMode::Off) {
+            // Shortcuts must not change sentence capitalization state.
+            // Match the modifier handling in checkForwardSpecialKey().
+            if (keyEvent.key().hasModifier()) {
+                return;
+            }
+            // Ignore auto-capitalize side-effects if we're processing automated replacement backspaces
+            bool isAutomatedBackspace = (g_isDeleting.load(std::memory_order_acquire) && isBackspace(currentSym)) || currentSym == FcitxKey_Pause;
+
+            if (!isAutomatedBackspace) {
+                if (shouldCapitalize_) {
+                    if (currentSym >= FcitxKey_a && currentSym <= FcitxKey_z) {
+                        auto upperSym = static_cast<KeySym>(currentSym - (FcitxKey_a - FcitxKey_A));
+                        currentSym    = upperSym;
+                        keyEvent.setKey(Key(upperSym, keyEvent.rawKey().states()));
+                        shouldCapitalize_ = false;
+                    } else if (currentSym != FcitxKey_space) {
+                        shouldCapitalize_ = false;
+                    }
+                }
+
+                switch (currentSym) {
+                    case FcitxKey_period:
+                    case FcitxKey_exclam:
+                    case FcitxKey_question: isPrevPunctuation_ = true; break;
+                    case FcitxKey_Return:
+                    case FcitxKey_KP_Enter:
+                        shouldCapitalize_  = true;
+                        isPrevPunctuation_ = false;
+                        break;
+                    case FcitxKey_space:
+                        if (isPrevPunctuation_) {
+                            shouldCapitalize_  = true;
+                            isPrevPunctuation_ = false;
+                        }
+                        break;
+                    default:
+                        if (currentSym != FcitxKey_space) {
+                            isPrevPunctuation_ = false;
+                        }
+                        break;
+                }
+            }
+        }
+    }
+
+    bool VNKeyState::handleKeyWhileDeleting(KeyEvent& keyEvent, KeySym currentSym) {
+        if (g_isDeleting.load(std::memory_order_acquire)) {
+            if (isBackspace(currentSym)) {
+                if (g_realTextLen.load(std::memory_order_acquire) > 0)
+                    g_realTextLen.fetch_sub(1, std::memory_order_acq_rel);
+                if (handleUInputKeyPress(keyEvent, currentSym)) {
+                    return true;
+                }
+            } else if (currentSym == FcitxKey_Pause) {
+                handleUInputKeyPress(keyEvent, currentSym);
+                return true;
+            } else if (realSelect_ && (currentSym == FcitxKey_Left || currentSym == FcitxKey_Delete)) {
+                if (currentSym == FcitxKey_Left) {
+                    // Echoed left arrow extends the selection in the app: consume it as
+                    // a selection signal, never buffer it for replay.
+                    if (g_realTextLen.load(std::memory_order_acquire) > 0)
+                        g_realTextLen.fetch_sub(1, std::memory_order_acq_rel);
+                    handleUInputKeyPress(keyEvent, currentSym);
+                } else {
+                    keyEvent.forward();
+                }
+                return true;
+            } else {
+                // Buffer incoming keys during the short uinput replacement
+                // burst to prevent them from interfering with backspaces
+                // and the pending commit. Some non-text keys may be consumed
+                // during this window. Forwarding them immediately could change
+                // the cursor before replacement completes. This is a known
+                // limitation of the fast-typing buffer.
+                // The modifier is not decided here: at press time the echo counter
+                // is a racy proxy for the uinput server's Shift hold in Select
+                // mode. The raw event is buffered and the modifier is chosen when
+                // the key is popped for replay, see replayBufferedKeys().
+                KeySym      symToBuffer   = currentSym;
+                KeyStates   stateToBuffer = keyEvent.rawKey().states();
+                std::string keyUtf8Check  = Key::keySymToUTF8(symToBuffer);
+                if (!keyUtf8Check.empty()) {
+                    VNKEY_WARN("Typing so fast, add key to queue");
+                    bufferedKeys_.push({.sym = symToBuffer, .state = stateToBuffer});
+                }
+                keyEvent.filterAndAccept();
+            }
+            return true;
+        }
+        return false;
+    }
+
+    bool VNKeyState::handleDoubleSpaceToPeriod(KeyEvent& keyEvent, KeySym currentSym) {
+        if (*engine_.config().doubleSpaceToPeriod && currentMode() != VNKeyMode::Off) {
+            bool isSpaceKey = (currentSym == FcitxKey_space || currentSym == FcitxKey_KP_Space);
+            if (isSpaceKey && !keyEvent.key().hasModifier()) {
+                if (isPrevSpace_) {
+                    keyEvent.filterAndAccept();
+                    handleDoubleSpaceReplacement();
+                    isPrevSpace_ = false;
+                    return true;
+                }
+                isPrevSpace_ = true;
+            } else {
+                isPrevSpace_ = false;
+            }
+        }
+        return false;
+    }
+
+    bool VNKeyState::handleDoubleHyphenToEmDash(KeyEvent& keyEvent, KeySym currentSym) {
+        if (*engine_.config().doubleHyphenToEmDash && currentMode() != VNKeyMode::Off) {
+            bool isHyphenKey = (currentSym == FcitxKey_minus || currentSym == FcitxKey_KP_Subtract);
+            if (isHyphenKey && !keyEvent.key().hasModifier()) {
+                if (isPrevHyphen_) {
+                    keyEvent.filterAndAccept();
+                    handleDoubleHyphenReplacement();
+                    isPrevHyphen_ = false;
+                    return true;
+                }
+                isPrevHyphen_ = true;
+            } else {
+                isPrevHyphen_ = false;
+            }
+        }
+        return false;
+    }
+
+    void VNKeyState::handleActiveMode(KeyEvent& keyEvent, KeySym currentSym) {
+        switch (currentMode()) {
+            case VNKeyMode::Smooth:
+            case VNKeyMode::SuperSmooth:
+            case VNKeyMode::Select: {
+                handleUinputMode(keyEvent, currentSym);
+                break;
+            }
+            case VNKeyMode::SurroundingText: {
+                handleSurroundingText(keyEvent, currentSym);
+                break;
+            }
+            case VNKeyMode::Preedit: {
+                handlePreeditMode(keyEvent, currentSym);
+                break;
+            }
+            case VNKeyMode::Emoji: {
+                handleEmojiMode(keyEvent);
+                break;
+            }
+            default: {
+                if (*engine_.config().enableMacroInOffMode && *engine_.config().enableMacro) {
+                    handleOffModeMacro(keyEvent, currentSym);
+                }
+                break;
+            }
+        }
+    }
+
+    void VNKeyState::reset(bool isFocusOut) {
+        if (isFocusOut && isUinputMode(currentMode())) {
+            deferredFocusOut_ = true;
+            deliverPendingCommits();
+            resetMacroSkip();
+            ic_.inputPanel().reset();
+            return;
+        }
+        deferredFocusOut_ = false;
+        resetNow(isFocusOut);
+    }
+
+    void VNKeyState::resetNow(bool isFocusOut) {
+        cancelSelectAbort();
+        cancelMouseClickWatchdog();
+        const auto& surrounding = ic_.surroundingText();
+        const auto& text        = surrounding.text();
+        size_t      textLen     = utf8::length(text);
+        g_realTextLen.store(textLen, std::memory_order_release);
+        if (g_isDeleting.load(std::memory_order_acquire)) {
+            return;
+        }
+        deliverPendingCommits();
+        resetMacroSkip();
+
+        if (vnkeyEngine_) {
+            isPrevSpace_  = false;
+            isPrevHyphen_ = false;
+            if (isFocusOut) {
+                shouldCapitalize_  = false;
+                isPrevPunctuation_ = false;
+            }
+            (*vnkeyEngine_).reset();
+            oldPreBuffer_.clear();
+            hasHistory_ = false;
+        }
+        if (getFrontendName(&ic_) != "dbus")
+            clearAllBuffers(!isFocusOut);
+
+        switch (currentMode()) {
+            case VNKeyMode::Preedit: {
+                ic_.inputPanel().reset();
+                ic_.updateUserInterface(UserInterfaceComponent::InputPanel);
+                ic_.updatePreedit();
+                break;
+            }
+            case VNKeyMode::SurroundingText:
+            case VNKeyMode::Smooth:
+            case VNKeyMode::SuperSmooth:
+            case VNKeyMode::Select: {
+                ic_.inputPanel().reset();
+                break;
+            }
+            case VNKeyMode::Emoji: {
+                ic_.inputPanel().reset();
+                ic_.updateUserInterface(UserInterfaceComponent::InputPanel);
+                ic_.updatePreedit();
+                break;
+            }
+            default: {
+                break;
+            }
+        }
+    }
+
+    void VNKeyState::flushDeferredFocusOut() {
+        if (!deferredFocusOut_) {
+            return;
+        }
+        deferredFocusOut_ = false;
+        resetNow(true);
+    }
+
+    void VNKeyState::cancelDeferredFocusOut() {
+        deferredFocusOut_ = false;
+    }
+
+    void VNKeyState::commitBuffer() {
+        deliverPendingCommits();
+        switch (currentMode()) {
+            case VNKeyMode::Preedit: {
+                ic_.inputPanel().reset();
+                ic_.inputPanel().setClientPreedit(Text());
+                ic_.inputPanel().setPreedit(Text());
+                ic_.updatePreedit();
+                ic_.updateUserInterface(UserInterfaceComponent::InputPanel);
+                if (vnkeyEngine_) {
+                    (*vnkeyEngine_).commitPreedit();
+                    const std::u32string commitText = pullCommitString();
+                    vnkey::fcitx_text::commit(&ic_, commitText, lastCommitTime_);
+                    (*vnkeyEngine_).reset();
+                }
+                ic_.updateUserInterface(UserInterfaceComponent::InputPanel);
+                ic_.updatePreedit();
+                break;
+            }
+            case VNKeyMode::Smooth:
+            case VNKeyMode::SurroundingText:
+            case VNKeyMode::SuperSmooth:
+            case VNKeyMode::Select: {
+                if (vnkeyEngine_) {
+                    (*vnkeyEngine_).reset();
+                }
+                break;
+            }
+            default: {
+                break;
+            }
+        }
+    }
+
+    void VNKeyState::clearAllBuffers(bool keepSentenceState) {
+        cancelSelectAbort();
+        cancelMouseClickWatchdog();
+        deliverPendingCommits();
+        VNKEY_DEBUG("Clear all buffers");
+        if (g_isDeleting.load(std::memory_order_acquire)) {
+            return;
+        }
+        resetMacroSkip();
+        oldPreBuffer_.clear();
+        hasHistory_         = false;
+        uinputAbortPending_ = false;
+        stashedCommit_.clear();
+        stashedNewWord_.clear();
+        uinputAbortTimeMs_ = 0;
+        if (!g_isDeleting.load(std::memory_order_acquire)) {
+            expectedBackspaces_    = 0;
+            currentBackspaceCount_ = 0;
+            replacementDeadlineMs_ = 0;
+            pendingCommitString_.clear();
+        }
+        emojiBuffer_.clear();
+        emojiCandidates_.clear();
+        bufferedKeys_.clear();
+        if (!keepSentenceState) {
+            shouldCapitalize_ = false;
+        }
+        isPrevSpace_  = false;
+        isPrevHyphen_ = false;
+        if (!keepSentenceState) {
+            isPrevPunctuation_ = false;
+        }
+        if (vnkeyEngine_)
+            (*vnkeyEngine_).reset();
+    }
+
+    bool VNKeyState::isEmptyHistory() const {
+        return !hasHistory_;
+    }
+
+    void VNKeyState::appendCommit(std::u32string_view text) {
+        commitBatch_.append(text);
+    }
+
+    void VNKeyState::scheduleDeferredCommit() {
+        if (deferredCommitPending_) {
+            return;
+        }
+        deferredCommitPending_ = true;
+        deferredCommitTimer_   = engine_.instance()->eventLoop().addTimeEvent(CLOCK_MONOTONIC, now(CLOCK_MONOTONIC), 0, [this](EventSourceTime*, uint64_t) {
+            deferredCommitPending_ = false;
+            deferCommits_          = false;
+            commitBatch_           = std::move(deferredCommitText_);
+            deferredCommitText_.clear();
+            replayBufferedKeys();
+            flushCommitBatch();
+            return false;
+        });
+    }
+
+    void VNKeyState::flushCommitBatch() {
+        if (commitBatch_.empty()) {
+            return;
+        }
+        if (deferCommits_) {
+            deferredCommitText_ += commitBatch_;
+            commitBatch_.clear();
+            scheduleDeferredCommit();
+            return;
+        }
+        vnkey::fcitx_text::commit(&ic_, commitBatch_, lastCommitTime_);
+        commitBatch_.clear();
+    }
+
+    void VNKeyState::deliverPendingCommits() {
+        deferCommits_ = false;
+        if (!deferredCommitText_.empty()) {
+            commitBatch_ += deferredCommitText_;
+            deferredCommitText_.clear();
+            deferredCommitPending_ = false;
+        }
+        flushCommitBatch();
+    }
+
+    void VNKeyState::replayBufferedKeys() {
+        const bool stripSelectShift = lastSelect_;
+        VNKEY_INFO("Starting replay buffered keys");
+        while (!bufferedKeys_.empty()) {
+            const KeyEntry entry = bufferedKeys_.pop();
+            auto           sym   = static_cast<KeySym>(entry.sym);
+            KeyStates      state(entry.state);
+            // The modifier is chosen at pop time, not at press time. Replay
+            // runs after the replacement burst finished, so the uinput server
+            // has already released the synthetic Shift it held for the
+            // Shift+Left selection. A stored Shift bit is therefore stripped
+            // unless Shift is still physically held right now (tracked live
+            // from key events), which means the user is holding it for a
+            // genuine capital letter. Backspace-driven modes never touch
+            // Shift, so their state is replayed untouched.
+            // Known limitation: Shift is sampled at replay time, not press
+            // time. A capital typed with Shift during the burst is replayed
+            // as lowercase if Shift was released before the replay runs.
+            if (stripSelectShift && state.test(KeyState::Shift) && !isShiftHeld()) {
+                sym   = unshiftKeySym(sym);
+                state = state.unset(KeyState::Shift);
+            }
+            const uint32_t keyCodePoint = Key::keySymToUnicode(sym);
+            if (keyCodePoint == 0U) {
+                continue;
+            }
+            const std::u32string keyText(1, static_cast<char32_t>(keyCodePoint));
+
+            bool                 replacementStarted = false;
+            bool                 processed          = vnkeyEngine_->processKey(engineKeyValue(sym), vnkey::keyStatesFromBits(state.toInteger()));
+
+            const std::u32string commitStr = pullCommitString();
+            if (!commitStr.empty()) {
+                DiffPart diffPart = compareAndSplitU32(oldPreBuffer_, commitStr);
+
+                if (!diffPart.deletedPart.empty()) {
+                    flushCommitBatch();
+                    // Remaining keys stay queued for the next replay cycle.
+                    performReplacement(diffPart);
+                    replacementStarted = true;
+                } else if (!diffPart.addedPart.empty()) {
+                    appendCommit(diffPart.addedPart);
+                }
+
+                hasHistory_ = false;
+                (*vnkeyEngine_).reset();
+                oldPreBuffer_.clear();
+            } else if (!processed) {
+                appendCommit(keyText);
+            } else {
+                hasHistory_ = true;
+                g_realTextLen.fetch_add(1, std::memory_order_acq_rel);
+
+                const std::u32string preeditStr = pullPreeditString();
+
+                DiffPart             diffPart = compareAndSplitU32(oldPreBuffer_, preeditStr);
+                if (diffPart.deletedPart.empty()) {
+                    if (!diffPart.addedPart.empty()) {
+                        appendCommit(diffPart.addedPart);
+                        oldPreBuffer_ = preeditStr;
+                    }
+                } else if (!injectionUsable() && !engine_.kbSender().connected()) {
+                    appendCommit(keyText);
+                } else {
+                    if (g_isDeleting.load(std::memory_order_acquire)) {
+                        g_isDeleting.store(false, std::memory_order_release);
+                    }
+
+                    flushCommitBatch();
+                    // Remaining keys stay queued for the next replay cycle.
+                    performReplacement(diffPart);
+                    oldPreBuffer_      = preeditStr;
+                    replacementStarted = true;
+                }
+            }
+            if (replacementStarted) {
+                return;
+            }
+        }
+        VNKEY_INFO("Replay buffered keys done");
+    }
+
+    bool VNKeyState::isMacroSkipModifier(KeySym sym) const {
+        const auto trigger = engine_.config().macroSkipTriggerModifier.value();
+        switch (trigger) {
+            case MacroSkipTriggerModifier::Shift: return sym == FcitxKey_Shift_L || sym == FcitxKey_Shift_R;
+            case MacroSkipTriggerModifier::Ctrl: return sym == FcitxKey_Control_L || sym == FcitxKey_Control_R;
+            case MacroSkipTriggerModifier::Alt: return sym == FcitxKey_Alt_L || sym == FcitxKey_Alt_R;
+            case MacroSkipTriggerModifier::Disabled:
+            default: return false;
+        }
+    }
+
+    void VNKeyState::handleModifierTap(const KeyEvent& keyEvent) {
+        const auto trigger = engine_.config().macroSkipTriggerModifier.value();
+        if (trigger == MacroSkipTriggerModifier::Disabled || !*engine_.config().enableMacro) {
+            return;
+        }
+        if (!isMacroSkipModifier(keyEvent.rawKey().sym())) {
+            trackingModifierTap_ = false;
+            return;
+        }
+        if (keyEvent.isRelease()) {
+            if (trackingModifierTap_) {
+                trackingModifierTap_ = false;
+                macroSkip_           = true;
+                vnkeyEngine_->setMacroEnabled(false);
+                VNKEY_INFO("Macro skip enabled for next word");
+            }
+        } else {
+            trackingModifierTap_ = true;
+        }
+    }
+
+    void VNKeyState::cancelModifierTap() {
+        trackingModifierTap_ = false;
+    }
+
+    // Known limitation: a single boolean tracks both Shift_L and
+    // Shift_R. Releasing either key clears shiftHeld_ even if the
+    // other Shift key is still physically held.
+    void VNKeyState::trackShiftModifier(const KeyEvent& keyEvent) {
+        const KeySym sym = keyEvent.rawKey().sym();
+        if (sym == FcitxKey_Shift_L || sym == FcitxKey_Shift_R) {
+            shiftHeld_ = !keyEvent.isRelease();
+        }
+    }
+
+    bool VNKeyState::isShiftHeld() const {
+        return shiftHeld_;
+    }
+
+    void VNKeyState::forgetShiftState() {
+        shiftHeld_ = false;
+    }
+
+    void VNKeyState::reEnableMacroAfterWordEnd() {
+        if (!macroSkip_) {
+            return;
+        }
+        if (!pullPreeditString().empty()) {
+            return;
+        }
+        macroSkip_ = false;
+        vnkeyEngine_->setMacroEnabled(*engine_.config().enableMacro);
+    }
+
+    void VNKeyState::resetMacroSkip() {
+        trackingModifierTap_ = false;
+        macroSkip_           = false;
+        if (vnkeyEngine_) {
+            vnkeyEngine_->setMacroEnabled(*engine_.config().enableMacro);
+        }
+    }
+
+    KeySym VNKeyState::unshiftKeySym(KeySym sym) {
+        if (sym >= FcitxKey_A && sym <= FcitxKey_Z) {
+            return static_cast<KeySym>(sym + (FcitxKey_a - FcitxKey_A));
+        }
+        switch (sym) {
+            case FcitxKey_asciitilde: return FcitxKey_grave;
+            case FcitxKey_exclam: return FcitxKey_1;
+            case FcitxKey_at: return FcitxKey_2;
+            case FcitxKey_numbersign: return FcitxKey_3;
+            case FcitxKey_dollar: return FcitxKey_4;
+            case FcitxKey_percent: return FcitxKey_5;
+            case FcitxKey_asciicircum: return FcitxKey_6;
+            case FcitxKey_ampersand: return FcitxKey_7;
+            case FcitxKey_asterisk: return FcitxKey_8;
+            case FcitxKey_parenleft: return FcitxKey_9;
+            case FcitxKey_parenright: return FcitxKey_0;
+            case FcitxKey_underscore: return FcitxKey_minus;
+            case FcitxKey_plus: return FcitxKey_equal;
+            case FcitxKey_braceleft: return FcitxKey_bracketleft;
+            case FcitxKey_braceright: return FcitxKey_bracketright;
+            case FcitxKey_bar: return FcitxKey_backslash;
+            case FcitxKey_colon: return FcitxKey_semicolon;
+            case FcitxKey_quotedbl: return FcitxKey_apostrophe;
+            case FcitxKey_less: return FcitxKey_comma;
+            case FcitxKey_greater: return FcitxKey_period;
+            case FcitxKey_question: return FcitxKey_slash;
+            default: return sym;
+        }
+    }
+
+} // namespace fcitx

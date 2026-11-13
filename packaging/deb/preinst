@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+if [ "$1" = "install" ] || [ "$1" = "upgrade" ]; then
+    dpkg-divert --package fcitx5-vnkey --add --rename \
+        --divert /usr/libexec/dcc-fcitx5configtool-exec.real /usr/libexec/dcc-fcitx5configtool-exec
+fi
+exit 0

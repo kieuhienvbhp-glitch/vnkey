@@ -1,0 +1,6 @@
+[InputMethod]
+Name=VNKey
+Icon=fcitx-vnkey
+LangCode=vi
+Addon=vnkey
+Configurable=True

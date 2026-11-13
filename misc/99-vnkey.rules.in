@@ -1,0 +1,2 @@
+KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput"
+ACTION=="add|change", KERNEL=="uinput", SUBSYSTEM=="misc", RUN+="@VNKEY_SETFACL_EXECUTABLE@ -m u:@VNKEY_UINPUT_PROXY_USER@:rw /dev/uinput"

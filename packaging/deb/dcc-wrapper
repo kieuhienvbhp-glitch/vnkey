@@ -1,0 +1,9 @@
+#!/bin/sh
+# VNKey: nút "Cài đặt" của bộ gõ VNKey trong Trung tâm điều khiển Deepin mở giao diện VNKey.
+# Các bộ gõ khác vẫn dùng công cụ gốc của Deepin (đã được dpkg-divert sang .real).
+for arg in "$@"; do
+    case "$arg" in
+        *vnkey*) exec /usr/bin/fcitx5-vnkey-settings ;;
+    esac
+done
+exec /usr/libexec/dcc-fcitx5configtool-exec.real "$@"

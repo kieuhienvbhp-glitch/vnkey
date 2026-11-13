@@ -1,0 +1,12 @@
+Package: fcitx5-vnkey
+Version: @VERSION@
+Section: utils
+Priority: optional
+Architecture: amd64
+Depends: acl, fcitx5, fcitx5-data, udev, python3, python3-dbus, python3-pyqt5, libc6 (>= 2.34), libdbus-1-3, libevdev2, libfcitx5config6, libfcitx5core7, libfcitx5utils2, libgcc-s1, libinput10, libnotify4, libstdc++6 (>= 12), libudev1, libwayland-client0, libxcb-xtest0, libxcb1
+Maintainer: Neo Vn <vnkey@localhost>
+Homepage: https://github.com/kieuhienvbhp-glitch/vnkey
+Description: Bo go tieng Viet VNKey cho fcitx5
+ VNKey la bo go tieng Viet khong gach chan cho Linux (GPL-3.0-or-later).
+ Ho tro Telex, VNI, VIQR, go tat,
+ kiem tra chinh ta, cac che do Tu dong, Xoa lui, Boi den go de, Sua truc tiep, Gach chan.
